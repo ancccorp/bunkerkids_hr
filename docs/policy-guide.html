@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>벙커키즈 HR 표준 정책 및 시스템 가이드</title>
+<style>
+  @font-face { font-family: "NotoKR"; font-weight: 400; src: url("https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.2.8/files/noto-sans-kr-korean-400-normal.woff2") format("woff2"); }
+  @font-face { font-family: "NotoKR"; font-weight: 500; src: url("https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.2.8/files/noto-sans-kr-korean-500-normal.woff2") format("woff2"); }
+  @font-face { font-family: "NotoKR"; font-weight: 700; src: url("https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.2.8/files/noto-sans-kr-korean-700-normal.woff2") format("woff2"); }
+  @font-face { font-family: "NotoKRLatin"; font-weight: 400; src: url("https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.2.8/files/noto-sans-kr-latin-400-normal.woff2") format("woff2"); }
+  @font-face { font-family: "NotoKRLatin"; font-weight: 700; src: url("https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.2.8/files/noto-sans-kr-latin-700-normal.woff2") format("woff2"); }
+  :root { --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --brand:#039855; --brand-bg:#ecfdf3; --warn-bg:#fffaeb; --warn:#b54708; }
+  * { box-sizing: border-box; }
+  body { font-family: "NotoKRLatin", "NotoKR", sans-serif; color: var(--ink); font-size: 10pt; line-height: 1.65; margin: 0; word-break: keep-all; }
+  h1 { font-size: 26pt; line-height: 1.25; margin: 0; }
+  h2 { font-size: 15pt; margin: 0 0 10pt; padding-bottom: 6pt; border-bottom: 2px solid var(--ink); break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 16pt 0 6pt; break-after: avoid; }
+  p { margin: 0 0 7pt; }
+  ul, ol { margin: 0 0 8pt; padding-left: 16pt; }
+  li { margin-bottom: 2pt; }
+  section { break-before: page; }
+  table { width: 100%; border-collapse: collapse; margin: 4pt 0 10pt; font-size: 9pt; break-inside: auto; }
+  tr { break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 4pt 6pt; text-align: left; vertical-align: top; }
+  th { background: #f9fafb; font-weight: 700; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  .muted { color: var(--muted); }
+  .small { font-size: 8.5pt; }
+  .box { border-radius: 6pt; padding: 8pt 11pt; margin: 6pt 0 10pt; break-inside: avoid; }
+  .note { background: #f3f4f6; }
+  .key { background: var(--brand-bg); border-left: 3pt solid var(--brand); }
+  .warn { background: var(--warn-bg); border-left: 3pt solid var(--warn); }
+  .law { color: var(--muted); font-size: 8.5pt; }
+  .cover { height: 260mm; display: flex; flex-direction: column; justify-content: space-between; padding: 30mm 4mm 0; }
+  .cover .logo { display: inline-flex; width: 34pt; height: 34pt; border-radius: 8pt; background: var(--ink); color: #fff; align-items: center; justify-content: center; font-weight: 700; font-size: 16pt; }
+  .cover .meta td { border: none; padding: 2pt 12pt 2pt 0; font-size: 10pt; }
+  .toc ol { padding-left: 18pt; columns: 2; column-gap: 24pt; }
+  .toc li { margin-bottom: 4pt; }
+  .tag { display: inline-block; font-size: 8pt; padding: 0 5pt; border-radius: 3pt; background: #f3f4f6; }
+  .tag.paid { background: var(--brand-bg); color: var(--brand); }
+  .tag.unpaid { background: #fef3f2; color: #b42318; }
+  .steps { counter-reset: s; list-style: none; padding-left: 0; }
+  .steps li { counter-increment: s; position: relative; padding-left: 22pt; margin-bottom: 5pt; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 1pt; width: 15pt; height: 15pt; border-radius: 50%; background: var(--ink); color: #fff; font-size: 8pt; text-align: center; line-height: 15pt; font-weight: 700; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; }
+</style>
+</head>
+<body>
+
+<!-- 표지 -->
+<div class="cover">
+  <div>
+    <span class="logo">B</span>
+    <p class="muted" style="margin-top:28pt">주식회사 벙커키즈 · 인사관리시스템</p>
+    <h1>HR 표준 정책 및<br>시스템 운영 가이드</h1>
+    <p style="margin-top:14pt; font-size:11.5pt; max-width:120mm">근무·휴가·급여·계약·증명서 정책과 벙커키즈 HR 시스템 사용법을 한 곳에 정리한 문서입니다.</p>
+  </div>
+  <div>
+    <table class="meta">
+      <tr><td class="muted">버전</td><td>v1.0</td></tr>
+      <tr><td class="muted">기준일</td><td>2026년 11월 23일</td></tr>
+      <tr><td class="muted">적용 대상</td><td>전 구성원 (정규직·수습)</td></tr>
+      <tr><td class="muted">관리 부서</td><td>MGMT (경영지원)</td></tr>
+      <tr><td class="muted">근거</td><td>근로기준법, 남녀고용평등법, 소득세법, 4대 사회보험 관계 법령, 관공서의 공휴일에 관한 규정</td></tr>
+    </table>
+    <div class="box warn small" style="margin-top:14pt">
+      이 문서는 국내 법정 기준과 업계에서 통용되는 표준 운영 방식을 바탕으로 작성한 <b>초안</b>입니다. 법률·세무 자문이 아니며, 취업규칙 반영과 실제 시행 전에는 공인노무사·세무사 검토를 받으시길 권장합니다. 요율·공휴일 등 매년 바뀌는 값은 기준일 현재 정보입니다.
+    </div>
+  </div>
+</div>
+
+<section class="toc">
+  <h2>목차</h2>
+  <ol>
+    <li>시스템 개요와 권한</li>
+    <li>계정·로그인 정책</li>
+    <li>조직과 결재라인</li>
+    <li>근무시간 정책</li>
+    <li>연차휴가 정책</li>
+    <li>휴가 유형</li>
+    <li>공휴일</li>
+    <li>워크플로우(전자결재)</li>
+    <li>급여 정책</li>
+    <li>전자계약</li>
+    <li>증명서 발급</li>
+    <li>개인정보 보호</li>
+    <li>연간 운영 캘린더</li>
+    <li>관리자 시작 가이드</li>
+    <li>부록: 설정 기본값과 FAQ</li>
+  </ol>
+  <h3>이 문서를 읽는 법</h3>
+  <div class="two">
+    <div class="box key"><b>구성원</b><br>1·2장(로그인), 4~7장(근무·휴가), 9장의 “임금명세서”, 10·11장(계약 서명·증명서)을 읽으면 충분합니다.</div>
+    <div class="box note"><b>관리자·결재권자</b><br>전체를 읽고, 특히 5장(연차 산정), 9장(급여 확정 절차), 13·14장(연간 운영·초기 설정)을 확인하세요.</div>
+  </div>
+  <h3>표기</h3>
+  <p><span class="tag paid">유급</span> 임금이 지급되는 휴가·휴일 &nbsp; <span class="tag unpaid">무급</span> 임금이 지급되지 않는 휴가 &nbsp; <span class="law">근거: 근로기준법 제00조</span> 관계 법령</p>
+</section>
+
+<section>
+  <h2>1. 시스템 개요와 권한</h2>
+  <p>벙커키즈 HR은 인사·근태·급여 업무를 한 곳에서 처리하는 사내 시스템입니다. 모든 기록(휴가 신청, 결재, 계약 서명, 증명서 발급, 급여 확정)은 시스템에 남으며, 이메일·메신저로 처리한 요청은 공식 기록으로 보지 않습니다.</p>
+  <table>
+    <tr><th style="width:18%">메뉴</th><th>하는 일</th><th style="width:26%">사용자</th></tr>
+    <tr><td>홈 피드</td><td>내가 결재할 할 일, 최근 공지, 동료 인정, 이번 주 일정·공휴일</td><td>전원</td></tr>
+    <tr><td>공지</td><td>사내 공지 열람, 리액션·댓글. 작성·숨김은 관리자</td><td>전원 / 관리자</td></tr>
+    <tr><td>구성원</td><td>조직별 구성원 디렉터리와 프로필</td><td>전원</td></tr>
+    <tr><td>구성원 관리</td><td>입·퇴사 등록, 인사정보·연봉 수정, CSV 다운로드</td><td>관리자</td></tr>
+    <tr><td>근무</td><td>주간 근무표, 근무 기록 수정</td><td>전원</td></tr>
+    <tr><td>휴가</td><td>잔여 연차와 산정 내역 확인, 휴가 신청·취소</td><td>전원</td></tr>
+    <tr><td>휴가 관리</td><td>휴가 승인·반려, 구성원별 연차 현황, 연차 수동 조정</td><td>결재권자 / 관리자</td></tr>
+    <tr><td>워크플로우</td><td>지출결의서 등 문서 결재</td><td>전원</td></tr>
+    <tr><td>전자계약</td><td>계약서 작성·발송(관리자), 계약서 확인·서명(구성원)</td><td>전원 / 관리자</td></tr>
+    <tr><td>급여</td><td>급여 대장 작성·확정(관리자), 임금명세서 열람(구성원)</td><td>전원 / 관리자</td></tr>
+    <tr><td>증명서</td><td>재직·경력증명서 셀프 발급과 인쇄</td><td>전원</td></tr>
+    <tr><td>설정</td><td>회사 정보, 근무시간, 연차 기준, 급여·보험요율, 조직·결재라인, 공휴일</td><td>관리자</td></tr>
+  </table>
+  <h3>권한 등급</h3>
+  <table>
+    <tr><th style="width:18%">등급</th><th>부여 방법</th><th>할 수 있는 일</th></tr>
+    <tr><td>구성원</td><td>구성원으로 등록되면 기본</td><td>본인 정보·휴가·명세서·계약·증명서. 다른 사람의 연락처·급여는 볼 수 없음</td></tr>
+    <tr><td>결재권자</td><td>설정 › 조직에서 조직의 결재권자로 지정</td><td>구성원 권한 + 본인에게 올라온 휴가·문서 승인/반려</td></tr>
+    <tr><td>관리자</td><td>구성원 정보의 권한을 “관리자”로 지정</td><td>전체 기능. 모든 휴가 대리 결재, 급여, 설정. <b>최소 인원(대표·인사 담당)만 지정</b></td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>2. 계정·로그인 정책</h2>
+  <ul>
+    <li>로그인은 <b>회사 Google Workspace 계정</b>(@bunkerkids.net)으로만 합니다. 개인 Gmail은 사용할 수 없습니다.</li>
+    <li>Google 계정 이메일이 <b>구성원 정보의 회사 이메일과 같아야</b> 들어갈 수 있습니다. 입사자 등록 시 회사 이메일을 정확히 입력하세요.</li>
+    <li>로그인 상태는 <b>12시간</b> 유지되며, 공용 PC에서는 사용 후 반드시 로그아웃합니다.</li>
+    <li>퇴사 처리(재직 상태 “퇴사”)하면 그 즉시 로그인과 기존 세션이 모두 차단됩니다. Google Workspace 계정 정지와 별도로, 퇴사일에 시스템 상태도 바꿔야 합니다.</li>
+    <li>최초 배포 시에는 환경 변수 <code>BOOTSTRAP_ADMIN_EMAIL</code>로 지정한 계정 하나만 관리자로 자동 생성되고, 이후 구성원은 관리자가 등록합니다.</li>
+  </ul>
+  <div class="box note small">개발·테스트 환경(Google 설정이 없는 경우)에서는 로그인 화면에서 구성원을 골라 들어가는 <b>개발 모드</b>로 동작하고 가상의 데모 데이터가 들어갑니다. 운영 환경에서는 반드시 Google 로그인을 설정합니다.</div>
+</section>
+
+<section>
+  <h2>3. 조직과 결재라인</h2>
+  <h3>기본 결재자</h3>
+  <p>휴가와 문서의 1차 결재자는 신청자 <b>소속 조직의 결재권자</b>입니다. 소속 조직에 결재권자가 없거나 신청자 본인이 결재권자이면 <b>상위 조직의 결재권자</b>로 올라가고, 최상위까지 없으면 다른 관리자가 결재합니다.</p>
+  <table>
+    <tr><th>조직</th><th>결재권자 (현재 설정 예시)</th></tr>
+    <tr><td>벙커키즈 (최상위), MGMT</td><td>대표이사</td></tr>
+    <tr><td>Business › Operation, Marketing</td><td>COO</td></tr>
+    <tr><td>Product › Tech, PM</td><td>CPO</td></tr>
+  </table>
+  <h3>결재 원칙</h3>
+  <ul>
+    <li><b>휴가는 사용일 2영업일 전까지</b> 신청하고, 결재권자는 1영업일 안에 처리합니다. 급한 병가·경조사는 사후 신청을 허용합니다.</li>
+    <li>결재권자가 부재하면 관리자가 <b>대리 결재</b>할 수 있으며, 화면에 “관리자 대리결재”로 표시됩니다.</li>
+    <li>반려할 때는 사유를 구두나 의견란으로 꼭 전달합니다.</li>
+    <li>조직 개편 시 설정 › 조직·결재라인에서 상위 조직과 결재권자를 먼저 바꾼 뒤 구성원 소속을 옮깁니다.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>4. 근무시간 정책</h2>
+  <table>
+    <tr><th style="width:24%">항목</th><th>기준</th><th style="width:22%">근거</th></tr>
+    <tr><td>소정근로시간</td><td>1일 8시간, 1주 40시간</td><td class="law">근로기준법 제50조</td></tr>
+    <tr><td>기본 근무시간</td><td>10:00 ~ 19:00 (설정에서 변경 가능)</td><td class="law">근로계약서 제3조</td></tr>
+    <tr><td>휴게시간</td><td>근무 4시간 이상 30분, 8시간 이상 1시간. 기본 12:00~13:00. 시스템이 자동 공제</td><td class="law">근로기준법 제54조</td></tr>
+    <tr><td>주휴일</td><td>일요일 <span class="tag paid">유급</span>. 토요일은 무급휴무일</td><td class="law">근로기준법 제55조</td></tr>
+    <tr><td>연장근로</td><td>당사자 합의 시 1주 12시간 한도. 통상임금의 50% 가산 지급</td><td class="law">제53조, 제56조</td></tr>
+    <tr><td>야간·휴일근로</td><td>22:00~06:00 야간 50% 가산, 휴일 8시간 이내 50%·초과 100% 가산</td><td class="law">근로기준법 제56조</td></tr>
+  </table>
+  <h3>근무 기록</h3>
+  <ul>
+    <li>기본 근무시간과 다르게 일한 날만 <b>근무 › 근무 기록 수정</b>으로 출퇴근 시간을 입력합니다. 입력하지 않은 날은 기본 근무시간대로 일한 것으로 봅니다.</li>
+    <li>하루 근무(휴게 제외)가 8시간을 넘으면 넘은 시간이 <b>연장근로로 자동 집계</b>되어 그달 급여에 연장근로수당으로 반영됩니다. 연장근로는 사전에 조직장과 합의합니다.</li>
+    <li>근무표의 주간 합계는 실제 근무시간과 휴가 인정 시간을 더한 값입니다. 공휴일은 유급휴일이라 근무시간에 포함하지 않습니다.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>5. 연차휴가 정책</h2>
+  <div class="box key">연차는 시스템이 <b>입사일과 회사 산정 기준으로 자동 계산</b>합니다. 구성원은 휴가 화면의 “연차 산정 내역”에서 발생 근거·사용량·잔여·소멸일을 언제든 확인할 수 있습니다.</div>
+  <h3>5.1 발생 기준 <span class="law">근로기준법 제60조</span></h3>
+  <ul>
+    <li><b>입사 1년 미만</b>: 1개월 개근할 때마다 1일, 최대 11일. 입사 1주년이 되면 소멸합니다.</li>
+    <li><b>1년 이상</b>: 15일.</li>
+    <li><b>3년 이상</b>: 최초 1년을 넘는 근속 2년마다 1일 가산, 최대 25일.</li>
+    <li>1일은 8시간이며 <b>종일 / 오전 반차(10~14시) / 오후 반차(15~19시) / 시간 단위</b>로 쓸 수 있습니다.</li>
+  </ul>
+  <table>
+    <tr><th>근속연수</th><th class="num">1년</th><th class="num">2년</th><th class="num">3년</th><th class="num">5년</th><th class="num">7년</th><th class="num">9년</th><th class="num">11년</th><th class="num">15년</th><th class="num">21년 이상</th></tr>
+    <tr><td>연차 일수</td><td class="num">15</td><td class="num">15</td><td class="num">16</td><td class="num">17</td><td class="num">18</td><td class="num">19</td><td class="num">20</td><td class="num">22</td><td class="num">25</td></tr>
+  </table>
+
+  <h3>5.2 산정 기준 선택 (설정 › 연차)</h3>
+  <table>
+    <tr><th style="width:18%"></th><th>입사일 기준 <span class="tag paid">기본값</span></th><th>회계연도 기준</th></tr>
+    <tr><td>부여 시점</td><td>각자 입사기념일마다</td><td>매년 1월 1일 일괄</td></tr>
+    <tr><td>입사 다음 해</td><td>1주년에 15일</td><td>1/1에 15일 × (입사연도 재직일수 ÷ 연간일수), 0.5일 단위 올림</td></tr>
+    <tr><td>장점</td><td>법 기준과 같아 퇴사 정산이 필요 없음</td><td>소멸일이 같아 관리가 쉬움</td></tr>
+    <tr><td>주의</td><td>사람마다 소멸일이 다름</td><td>퇴사 시 입사일 기준보다 적게 받았다면 차이를 정산해야 함</td></tr>
+  </table>
+  <p><b>권장:</b> 구성원 30명 이하인 지금은 <b>입사일 기준</b>을 권장합니다. 법 기준과 같아 분쟁·정산 리스크가 없습니다.</p>
+
+  <h3>5.3 예시: 2025년 7월 1일 입사자</h3>
+  <table>
+    <tr><th>시점</th><th>입사일 기준</th><th>회계연도 기준</th></tr>
+    <tr><td>2025년</td><td rowspan="2">2025.8.1부터 매월 1일씩, 2026.6.1까지 총 11일<br><span class="muted small">2026.6.30 소멸</span></td><td>월 단위 5일 (8~12월)</td></tr>
+    <tr><td>2026년</td><td>비례 연차 8일 (15 × 184/365 = 7.56 → 8)<br>+ 2026년 월 단위 6일 (1~6월)<br>+ 2025년 미사용 월차 이월 (6.30 소멸)</td></tr>
+    <tr><td>2026.7.1 ~</td><td>15일 (2027.6.30 소멸)</td><td>(2026년분에 포함)</td></tr>
+    <tr><td>2027년</td><td>2027.7.1부터 15일</td><td>1/1에 15일</td></tr>
+    <tr><td>2028~2029년</td><td>2028.7.1부터 16일</td><td>2028년 15일, 2029년 16일</td></tr>
+  </table>
+
+  <h3>5.4 사용 규칙</h3>
+  <ul>
+    <li>종일 휴가는 <b>주말·공휴일을 빼고</b> 계산합니다. 예: 목요일~월요일 휴가 중 금요일이 공휴일이면 2일 사용.</li>
+    <li>신청하면 <b>승인 대기 중에도 잔여에서 먼저 차감</b>되고, 반려·취소하면 돌아옵니다.</li>
+    <li>잔여보다 많이 쓰는 <b>선사용</b>은 결재권자 승인 시에만 허용하며, 다음 산정 기간 발생분에서 차감하거나 퇴사 시 정산합니다.</li>
+    <li>승인된 휴가도 사용일 전까지는 본인이 취소할 수 있습니다.</li>
+    <li>특별한 사정(포상, 이전 기간 정산 등)으로 연차를 더하거나 빼야 하면 관리자가 <b>휴가 관리 › 연차 조정</b>으로 처리하며, 사유와 처리자가 이력으로 남습니다.</li>
+  </ul>
+
+  <h3>5.5 소멸과 연차사용촉진 <span class="law">근로기준법 제61조</span></h3>
+  <p>미사용 연차는 산정 기간이 끝나면 소멸하고, 원칙적으로 미사용 연차수당을 지급합니다. 다만 회사가 아래 <b>사용촉진 절차</b>를 지키면 수당 지급 의무가 면제됩니다.</p>
+  <ol class="steps">
+    <li><b>기간 만료 6개월 전 기준 10일 이내</b>: 회사가 구성원별 미사용 일수를 알리고, 사용 시기를 정해 달라고 서면(전자문서 포함)으로 요청</li>
+    <li><b>요청받은 날부터 10일 이내</b>: 구성원이 사용 시기를 정해 회사에 통보</li>
+    <li>통보가 없으면 <b>기간 만료 2개월 전까지</b>: 회사가 사용 시기를 정해 서면 통보</li>
+  </ol>
+  <div class="box warn small">1년 미만 월 단위 연차는 촉진 시점이 다릅니다(9일분은 만료 3개월 전, 마지막 2일분은 1개월 전). 현재 시스템은 잔여·소멸일을 보여주고, 촉진 통지는 공지·이메일로 따로 발송합니다. 통지문 사본은 3년 보관합니다.</div>
+</section>
+
+<section>
+  <h2>6. 휴가 유형</h2>
+  <p>모든 휴가는 <b>휴가 › 휴가 신청</b>에서 종류를 골라 신청하고, 결재권자 승인으로 확정됩니다. 법정 휴가는 법이 정한 기준이고, 경조휴가는 회사 규정(취업규칙에 명시)입니다.</p>
+  <table>
+    <tr><th style="width:22%">휴가</th><th style="width:22%">부여</th><th style="width:10%">급여</th><th>기준·비고</th></tr>
+    <tr><td>연차</td><td>5장 기준</td><td><span class="tag paid">유급</span></td><td class="law">근로기준법 제60조</td></tr>
+    <tr><td>배우자 출산휴가</td><td>20일</td><td><span class="tag paid">유급</span></td><td>출산일부터 120일 안에 사용, 3회까지 나눠 사용 가능 <span class="law">남녀고용평등법 제18조의2 (2025.2.23 시행)</span></td></tr>
+    <tr><td>배우자 유산·사산휴가</td><td>3일</td><td>첫날 유급</td><td class="law">남녀고용평등법 제18조의2 (2025.2.23 시행)</td></tr>
+    <tr><td>출산전후휴가</td><td>90일 (다태아 120일)</td><td>최초 60일 유급</td><td>출산 후 45일(다태아 60일) 이상 확보. 이후 고용보험 급여 <span class="law">근로기준법 제74조</span></td></tr>
+    <tr><td>가족돌봄휴가</td><td>연 10일</td><td><span class="tag unpaid">무급</span></td><td>가족의 질병·사고·노령·자녀 양육 <span class="law">남녀고용평등법 제22조의2</span></td></tr>
+    <tr><td>보건휴가</td><td>월 1일</td><td><span class="tag unpaid">무급</span></td><td>여성 구성원 청구 시 <span class="law">근로기준법 제73조</span></td></tr>
+    <tr><td>결혼 (본인)</td><td>5일</td><td><span class="tag paid">유급</span></td><td>회사 규정. 결혼일 전후 30일 안에 사용</td></tr>
+    <tr><td>조의 (부모·배우자·자녀)</td><td>5일</td><td><span class="tag paid">유급</span></td><td>회사 규정</td></tr>
+    <tr><td>조의 (조부모·형제자매)</td><td>3일</td><td><span class="tag paid">유급</span></td><td>회사 규정</td></tr>
+    <tr><td>병가</td><td>연 60일</td><td><span class="tag unpaid">무급</span></td><td>회사 규정. 연차를 먼저 쓰고 사용, 연속 3일 이상이면 진단서 제출</td></tr>
+    <tr><td>예비군·민방위 훈련</td><td>훈련 기간</td><td><span class="tag paid">유급</span></td><td>공가. 훈련 통지서 첨부 <span class="law">예비군법 제10조, 민방위기본법 제27조</span></td></tr>
+    <tr><td>건강검진</td><td>연 1회 4시간</td><td><span class="tag paid">유급</span></td><td>회사 규정 (일반건강검진 수검 독려)</td></tr>
+  </table>
+  <div class="box note small">육아휴직(최대 1년 6개월, 부모 모두 3개월 이상 사용 시)과 육아기 근로시간 단축은 별도 신청서와 고용보험 신청이 필요해 워크플로우의 “일반 품의”로 접수합니다.</div>
+</section>
+
+<section>
+  <h2>7. 공휴일</h2>
+  <ul>
+    <li>상시 5명 이상 사업장은 「관공서의 공휴일에 관한 규정」에 따른 공휴일과 대체공휴일이 <b>유급휴일</b>입니다 (근로기준법 제55조 제2항). 근로자의 날(5월 1일)도 유급휴일입니다.</li>
+    <li>공휴일은 근무표에 🎌로 표시되고, <b>휴가 일수 계산과 근무시간 합계에서 빠집니다.</b></li>
+    <li>공휴일에 일하면 휴일근로로 보고 가산수당을 지급하거나, 구성원 대표와 서면 합의해 다른 근로일로 대체합니다.</li>
+    <li>시스템에는 2025~2027년 공휴일이 들어 있습니다. 임시공휴일·선거일은 정부 발표 즉시 <b>설정 › 공휴일</b>에 추가하고, 매년 12월에 다음 해 목록(한국천문연구원 월력요항)을 대조합니다.</li>
+  </ul>
+  <h3>2026년 공휴일</h3>
+  <table>
+    <tr><th>날짜</th><th>이름</th><th>날짜</th><th>이름</th></tr>
+    <tr><td>1.1 (목)</td><td>신정</td><td>6.3 (수)</td><td>전국동시지방선거일</td></tr>
+    <tr><td>2.16~2.18 (월~수)</td><td>설날 연휴</td><td>6.6 (토)</td><td>현충일</td></tr>
+    <tr><td>3.1 (일), 3.2 (월)</td><td>삼일절, 대체공휴일</td><td>8.15 (토), 8.17 (월)</td><td>광복절, 대체공휴일</td></tr>
+    <tr><td>5.5 (화)</td><td>어린이날</td><td>9.24~9.26 (목~토)</td><td>추석 연휴</td></tr>
+    <tr><td>5.24 (일), 5.25 (월)</td><td>부처님오신날, 대체공휴일</td><td>10.3 (토), 10.5 (월)</td><td>개천절, 대체공휴일</td></tr>
+    <tr><td>5.1 (금)</td><td>근로자의 날 (유급휴일, 별도 법률)</td><td>10.9 (금), 12.25 (금)</td><td>한글날, 성탄절</td></tr>
+  </table>
+  <p class="small muted">근로자의 날은 관공서 공휴일이 아니라 시스템 목록에 없습니다. 휴무로 운영한다면 설정 › 공휴일에 추가하세요.</p>
+</section>
+
+<section>
+  <h2>8. 워크플로우 (전자결재)</h2>
+  <p>비용 지출, 구매, 계약 발송 등 경영지원팀에 요청할 일은 모두 워크플로우 문서로 접수합니다.</p>
+  <table>
+    <tr><th style="width:26%">양식</th><th>사용하는 경우</th><th style="width:28%">기본 결재선</th></tr>
+    <tr><td>지출결의서(이체요청서)</td><td>외부 업체 송금, 법인카드 사용 후 정산</td><td>조직 결재권자 → (100만 원 초과 시) 대표</td></tr>
+    <tr><td>비품 구매 요청</td><td>업무용 장비·소모품 구매</td><td>조직 결재권자 → MGMT</td></tr>
+    <tr><td>지원금 신청</td><td>교육·도서·AI 도구 등 복지 지원금</td><td>MGMT</td></tr>
+    <tr><td>계약서 발송 요청</td><td>외부 계약 검토·날인 요청</td><td>조직 결재권자 → 대표</td></tr>
+    <tr><td>일반 품의</td><td>그 밖의 승인이 필요한 일 (육아휴직 신청 포함)</td><td>조직 결재권자</td></tr>
+  </table>
+  <ul>
+    <li>결재선은 최대 3단계이며 순서대로 진행됩니다. 앞 단계가 승인해야 다음 결재자에게 넘어갑니다.</li>
+    <li>한 명이라도 반려하면 문서는 반려로 끝납니다. 수정이 필요하면 새로 작성합니다.</li>
+    <li>법인카드 영수증은 사용 후 <b>7일 이내</b> 지출결의서로 제출합니다.</li>
+    <li>기안자는 결재가 끝나기 전까지 요청을 취소할 수 있습니다.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>9. 급여 정책</h2>
+  <h3>9.1 지급 기준</h3>
+  <table>
+    <tr><th style="width:24%">항목</th><th>기준</th></tr>
+    <tr><td>지급일</td><td>매월 <b>25일</b>, 당월분 지급. 휴일이면 전 영업일</td></tr>
+    <tr><td>연봉 구성</td><td>연봉(식대 포함) ÷ 12 = 월 지급액. 이 중 <b>식대 월 20만 원은 비과세</b> <span class="law">소득세법 시행령 제17조의2</span></td></tr>
+    <tr><td>입·퇴사 월</td><td>재직 일수 ÷ 그달 일수로 <b>일할 계산</b></td></tr>
+    <tr><td>통상시급</td><td>월 지급액 ÷ 209시간 (주 40시간 + 주휴 8시간 기준)</td></tr>
+    <tr><td>연장근로수당</td><td>통상시급 × 1.5 × 연장근로시간 (근무 기록 기준 자동 집계)</td></tr>
+    <tr><td>기타 수당·공제</td><td>인센티브, 경조금, 상조회비 등은 급여 대장에서 항목별로 입력하고 명세서에 메모로 표시</td></tr>
+  </table>
+
+  <h3>9.2 4대보험 근로자 부담분 (2026년)</h3>
+  <table>
+    <tr><th>보험</th><th class="num">근로자 요율</th><th>계산 기준</th></tr>
+    <tr><td>국민연금</td><td class="num">4.75%</td><td>과세 급여(보수월액). 기준소득월액 하한 40만 원·상한 637만 원 (2025.7~2026.6, 매년 7월 변경). 2026년 총 요율 9.5%</td></tr>
+    <tr><td>건강보험</td><td class="num">3.595%</td><td>과세 급여. 총 요율 7.19%</td></tr>
+    <tr><td>장기요양보험</td><td class="num">13.14%</td><td>건강보험료에 곱함</td></tr>
+    <tr><td>고용보험</td><td class="num">0.9%</td><td>과세 급여 (실업급여분)</td></tr>
+    <tr><td>산재보험</td><td class="num">-</td><td>전액 회사 부담이라 급여에서 공제하지 않음</td></tr>
+  </table>
+  <ul class="small">
+    <li>보험료는 10원 미만을 버립니다.</li>
+    <li><b>월 중(1일이 아닌 날) 입사한 달</b>과 <b>자격 상실일(퇴사 다음 날)이 속한 달</b>에는 국민연금·건강보험을 공제하지 않습니다. 고용보험은 실제 보수 기준으로 매월 공제합니다.</li>
+    <li>요율은 매년 1월, 국민연금 상·하한은 매년 7월 고시를 확인해 설정 › 급여·4대보험에서 고칩니다.</li>
+  </ul>
+
+  <h3>9.3 근로소득세</h3>
+  <p>매월 국세청 <b>근로소득 간이세액표</b> 기준으로 원천징수하고, 지방소득세는 소득세의 10%입니다. 시스템은 간이세액표를 만드는 산식(근로소득공제 → 인적공제·보험료 공제 → 기본세율 → 근로소득세액공제)으로 <b>추정치</b>를 계산합니다.</p>
+  <div class="box warn small">시스템 소득세는 추정치라 간이세액표와 몇천~몇만 원 차이가 날 수 있습니다. <b>확정 전 반드시 간이세액표(홈택스 조회) 또는 세무대리인 계산과 대조</b>하고, 차이는 해당 구성원의 기타 공제·기타 수당으로 보정합니다. 공제대상 가족 수(본인 포함)는 구성원 정보에 입력하며, 연말정산 때 최종 세액이 확정됩니다.</div>
+
+  <h3>9.4 월 급여 처리 절차</h3>
+  <ol class="steps">
+    <li><b>~ 20일</b> 입·퇴사, 연봉 변경(서명된 연봉계약서는 자동 반영), 부양가족 수를 구성원 정보에서 확인</li>
+    <li><b>20일</b> 급여 › 정산 시작으로 해당 월 급여 대장 생성 (연봉 등록자, 휴직자 제외)</li>
+    <li><b>21~22일</b> 기타 수당·공제 입력, 소득세 대조·보정, 필요 시 “다시 계산”</li>
+    <li><b>23일</b> 대표 검토 후 <b>확정</b> → 구성원에게 임금명세서 공개 (확정 후 수정 불가)</li>
+    <li><b>25일</b> 이체 실행</li>
+    <li><b>다음 달 10일</b> 원천세 신고·납부 (홈택스)</li>
+  </ol>
+  <h3>9.5 임금명세서 <span class="law">근로기준법 제48조 제2항</span></h3>
+  <p>임금 지급 시 구성항목·계산방법·공제내역을 적은 명세서를 교부해야 합니다. 시스템 명세서에는 항목별 금액과 계산 방법이 모두 표시되고, 구성원은 급여 › 내 급여명세서에서 확인·인쇄할 수 있습니다.</p>
+  <h3>9.6 4대보험 신고</h3>
+  <ul class="small">
+    <li>취득 신고: 국민연금·고용·산재는 취득일이 속한 달의 다음 달 15일까지, 건강보험은 취득일부터 14일 이내 (4대사회보험 정보연계센터에서 한 번에 신고 가능)</li>
+    <li>상실 신고: 퇴사 다음 날이 속한 달의 다음 달 15일까지 (건강보험은 14일 이내), 퇴직 시 건강보험 정산 필요</li>
+  </ul>
+</section>
+
+<section>
+  <h2>10. 전자계약</h2>
+  <h3>10.1 표준 양식</h3>
+  <table>
+    <tr><th style="width:22%">양식</th><th>사용 시점</th><th>담긴 내용</th></tr>
+    <tr><td>근로계약서</td><td>입사일 전 (늦어도 첫 출근일)</td><td>계약기간·수습, 근무장소·업무, 소정근로시간·휴게, 휴일, 임금(구성·계산·지급일·방법), 연차, 사회보험, 교부 <span class="law">근로기준법 제17조 필수 기재사항 포함</span></td></tr>
+    <tr><td>연봉계약서</td><td>연봉 조정 시 (보통 연 1회)</td><td>연봉, 월 지급액, 식대, 적용 기간. 서명하면 구성원 연봉 정보가 자동 갱신</td></tr>
+    <tr><td>비밀유지서약서</td><td>입사 시</td><td>영업비밀·개인정보 보호, 퇴직 시 자료 반납</td></tr>
+  </table>
+  <h3>10.2 절차</h3>
+  <ol class="steps">
+    <li>관리자: 전자계약 › 계약서 작성에서 구성원·양식·연봉을 고르면 회사 정보와 인사 정보가 자동으로 채워집니다. 본문을 확인·수정한 뒤 서명을 요청합니다.</li>
+    <li>구성원: 전자계약에 “서명대기”로 표시됩니다. 내용을 끝까지 읽고 동의에 체크한 뒤 <b>본인 이름</b>을 입력해 서명합니다.</li>
+    <li>서명이 끝나면 양쪽 모두 계약서를 열람·인쇄(PDF 저장)할 수 있습니다. 이것이 근로계약서 <b>교부</b>입니다.</li>
+  </ol>
+  <h3>10.3 기록과 효력</h3>
+  <ul>
+    <li>발송 시점 본문의 <b>SHA-256 해시</b>를 저장하고, 서명할 때 본문이 바뀌지 않았는지 검증합니다. 서명 시각, 서명자, 접속 IP(해시값)도 남습니다.</li>
+    <li>본인 확인은 회사 Google 계정 로그인으로 합니다. 전자문서법·전자서명법상 전자 방식의 근로계약 체결·교부는 유효합니다.</li>
+    <li>발송 후에는 본문을 고칠 수 없습니다. 수정이 필요하면 기존 계약을 <b>폐기</b>하고 새로 발송합니다.</li>
+    <li>근로계약서는 퇴직 후 <b>3년간 보존</b>해야 합니다 (근로기준법 제42조). 퇴사자 계약도 삭제하지 않습니다.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>11. 증명서 발급</h2>
+  <table>
+    <tr><th style="width:22%">증명서</th><th>대상</th><th>내용</th></tr>
+    <tr><td>재직증명서</td><td>현재 재직 중인 구성원</td><td>성명, 생년월일, 소속, 직무, 재직기간(~현재), 제출 용도</td></tr>
+    <tr><td>경력증명서</td><td>재직자·퇴직자</td><td>근무기간(입사일~퇴사일 또는 발급일)과 위 항목</td></tr>
+  </table>
+  <ul>
+    <li>구성원은 <b>증명서</b> 메뉴에서 종류와 제출 용도를 입력하면 바로 발급됩니다. 발급본은 인쇄하거나 PDF로 저장합니다.</li>
+    <li>모든 발급에는 <b>문서번호</b>(BK-연도-순번)가 붙고 발급 대장에 남습니다. 외부 기관이 진위를 물으면 문서번호로 확인해 줍니다.</li>
+    <li>발급본에는 발급 시점의 정보가 고정 저장되어, 이후 인사정보가 바뀌어도 발급 내용은 그대로입니다.</li>
+    <li>퇴직자가 경력증명서(사용증명서)를 요청하면 <b>사실대로 즉시</b> 발급해야 합니다 (근로기준법 제39조). 계정이 차단된 퇴직자는 관리자가 대신 발급해 전달합니다.</li>
+    <li>회사 직인이 필요한 기관에는 출력본에 직인을 찍어 제출합니다. 회사 정보(대표자, 사업자번호, 주소)는 설정 › 회사·근무에서 관리합니다.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>12. 개인정보 보호</h2>
+  <table>
+    <tr><th style="width:26%">정보</th><th>열람 가능</th></tr>
+    <tr><td>이름, 소속, 직무, 회사 이메일</td><td>전 구성원</td></tr>
+    <tr><td>휴대전화, 개인 이메일, 사번, 생년월일</td><td>본인, 관리자</td></tr>
+    <tr><td>연봉, 급여 대장, 명세서</td><td>본인(확정된 명세서), 관리자</td></tr>
+    <tr><td>휴가 사유</td><td>본인, 결재권자, 관리자</td></tr>
+    <tr><td>계약서, 증명서</td><td>본인, 관리자</td></tr>
+  </table>
+  <ul>
+    <li><b>주민등록번호는 시스템에 저장하지 않습니다.</b> 4대보험 신고·연말정산에는 별도 보안 경로(세무대리인, 홈택스)를 씁니다.</li>
+    <li>접속 IP는 해시값으로만 저장합니다.</li>
+    <li>관리자 권한은 업무상 꼭 필요한 사람에게만 주고, 담당자가 바뀌면 즉시 회수합니다.</li>
+    <li>구성원 CSV 다운로드 파일은 업무 후 삭제하고 외부로 보내지 않습니다.</li>
+    <li>DB 파일은 매일 백업하고, 백업본은 접근이 제한된 저장소에 둡니다.</li>
+    <li>퇴사자 정보는 계약서·급여 기록 보존 기간(3년, 세무 기록 5년)이 지나면 파기를 검토합니다.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>13. 연간 운영 캘린더</h2>
+  <table>
+    <tr><th style="width:16%">시기</th><th>할 일</th><th style="width:26%">시스템 메뉴</th></tr>
+    <tr><td>매월 20~25일</td><td>급여 대장 생성 → 검토·확정 → 지급 (9.4)</td><td>급여</td></tr>
+    <tr><td>매월 10일</td><td>전월 원천세 신고·납부</td><td>(홈택스)</td></tr>
+    <tr><td>1월</td><td>4대보험 요율 확인·수정, 연말정산 자료 수집 (2월 급여에 반영), 회계연도 기준이면 연차 일괄 부여 확인</td><td>설정 › 급여·4대보험</td></tr>
+    <tr><td>3월</td><td>연말정산 환급·추징 반영 마감</td><td>급여 (기타 수당·공제)</td></tr>
+    <tr><td>7월</td><td>국민연금 기준소득월액 상·하한 변경 반영, 회계연도 기준이면 하반기 연차사용촉진 1차 통지</td><td>설정 › 급여·4대보험</td></tr>
+    <tr><td>연 1회</td><td>연봉계약 갱신, 법정 의무교육(성희롱 예방·개인정보보호·장애인 인식개선·직장 내 괴롭힘 예방) 실시</td><td>전자계약</td></tr>
+    <tr><td>각자 만료 6개월 전</td><td>입사일 기준 연차사용촉진 1차 통지 (5.5)</td><td>휴가 관리 › 구성원별 연차 현황</td></tr>
+    <tr><td>12월</td><td>다음 해 공휴일 대조·등록, 조직·결재라인 점검</td><td>설정 › 공휴일, 조직</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>14. 관리자 시작 가이드</h2>
+  <h3>운영 배포 직후 (최초 1회)</h3>
+  <ol class="steps">
+    <li><b>설정 › 회사·근무</b>: 회사명, 대표자, 사업자등록번호, 주소, 기본 근무시간 입력</li>
+    <li><b>설정 › 연차</b>: 산정 기준 선택 (권장: 입사일 기준)</li>
+    <li><b>설정 › 급여·4대보험</b>: 지급일과 올해 요율 확인</li>
+    <li><b>설정 › 조직·결재라인</b>: 조직도를 만들고 조직별 결재권자 지정</li>
+    <li><b>구성원 관리 › 구성원 추가</b>: 회사 이메일(Google 계정과 동일), 입사일, 조직, 연봉, 생년월일, 공제대상 가족 수 입력</li>
+    <li><b>전자계약</b>: 기존 구성원의 근로계약서·비밀유지서약서를 시스템으로 다시 받아 보관</li>
+    <li>기존에 쓴 연차가 있다면 <b>휴가 관리 › 연차 조정</b>으로 이전 사용분을 차감 (사유: “이전 시스템 사용분”)</li>
+    <li>전 구성원에게 공지로 로그인 방법과 이 가이드를 안내</li>
+  </ol>
+  <h3>입사자 처리</h3>
+  <ol class="steps">
+    <li>Google Workspace 계정 생성</li>
+    <li>구성원 추가 (재직 상태 “수습”, 3개월 뒤 “재직”으로 변경)</li>
+    <li>근로계약서·비밀유지서약서 서명 요청 → 첫 출근일까지 서명 완료</li>
+    <li>4대보험 취득 신고</li>
+  </ol>
+  <h3>퇴사자 처리</h3>
+  <ol class="steps">
+    <li>퇴사 예정일 입력, 재직 상태 “퇴사예정”</li>
+    <li>잔여 연차 확인 → 사용 또는 미사용 수당 정산 (회계연도 기준이면 입사일 기준과 비교해 정산)</li>
+    <li>마지막 달 급여(일할) 확정, 퇴직금 산정(1년 이상 근속, 평균임금 30일분 × 근속연수), 퇴사일부터 14일 안에 지급</li>
+    <li>퇴사일에 재직 상태 “퇴사” → 로그인 즉시 차단, Google 계정 정지</li>
+    <li>4대보험 상실 신고, 요청 시 경력증명서 발급</li>
+  </ol>
+</section>
+
+<section>
+  <h2>15. 부록: 설정 기본값과 FAQ</h2>
+  <h3>시스템 기본값</h3>
+  <table>
+    <tr><th style="width:34%">설정</th><th>기본값</th></tr>
+    <tr><td>기본 근무시간</td><td>10:00 ~ 19:00 (휴게 1시간)</td></tr>
+    <tr><td>연차 산정 기준</td><td>입사일 기준</td></tr>
+    <tr><td>반차 시간</td><td>오전 10:00~14:00, 오후 15:00~19:00 (각 4시간)</td></tr>
+    <tr><td>급여 지급일</td><td>매월 25일 (당월분)</td></tr>
+    <tr><td>비과세 식대</td><td>월 200,000원</td></tr>
+    <tr><td>4대보험 근로자 요율</td><td>국민연금 4.75%, 건강보험 3.595%, 장기요양 13.14%(건강보험료 대비), 고용보험 0.9%</td></tr>
+    <tr><td>국민연금 기준소득월액</td><td>하한 400,000원 / 상한 6,370,000원</td></tr>
+    <tr><td>세션 유지</td><td>12시간</td></tr>
+    <tr><td>공휴일</td><td>2025~2027년 관공서 공휴일·대체공휴일</td></tr>
+  </table>
+  <h3>자주 묻는 질문</h3>
+  <p><b>Q. 잔여 연차가 마이너스로 보여요.</b><br>승인 대기 중인 신청도 먼저 차감하기 때문입니다. 결재권자가 승인한 선사용이면 다음 기간에 정산됩니다(5.4).</p>
+  <p><b>Q. 반차를 썼는데 근무표 합계가 8시간이에요.</b><br>휴가 시간도 근무 인정 시간으로 합산합니다. 실제 근무 4시간 + 반차 4시간입니다.</p>
+  <p><b>Q. 이번 달 명세서가 안 보여요.</b><br>관리자가 급여를 확정해야 공개됩니다. 보통 23일에 확정합니다.</p>
+  <p><b>Q. 명세서 소득세가 작년과 달라요.</b><br>간이세액은 월 과세 급여와 공제대상 가족 수로 정해집니다. 가족 수가 바뀌었다면 관리자에게 알려 주세요. 최종 세액은 연말정산 때 확정됩니다.</p>
+  <p><b>Q. 로그인하면 “등록된 구성원이 아니에요”라고 나와요.</b><br>Google 계정 이메일과 구성원 정보의 회사 이메일이 다른 경우입니다. 관리자에게 이메일 수정을 요청하세요.</p>
+  <p><b>Q. 계약서 내용이 틀렸어요.</b><br>서명하지 말고 관리자에게 알려 주세요. 관리자가 폐기 후 새로 보냅니다.</p>
+  <p class="muted small" style="margin-top:18pt">문의: MGMT(경영지원) · 이 문서는 정책이 바뀔 때마다 버전을 올려 다시 공지합니다.</p>
+</section>
+
+</body>
+</html>
