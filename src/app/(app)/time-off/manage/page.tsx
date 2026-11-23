@@ -113,9 +113,9 @@ function Requests({ myId, isAdmin }: { myId: number; isAdmin: boolean }) {
 function Balances() {
   const users = listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] });
   return (
-    <div className="mt-6 overflow-x-auto rounded-xl border border-gray-200">
+    <div className="mt-6 table-wrap">
       <table className="w-full min-w-[640px] whitespace-nowrap text-sm">
-        <thead className="bg-gray-50 text-left text-xs text-gray-500">
+        <thead>
           <tr>
             {["이름", "입사일", "산정 기간", "발생", "사용(승인+대기)", "잔여"].map((h) => (
               <th key={h} className="px-4 py-3 font-medium">

@@ -34,9 +34,9 @@ export default async function PayrollPage() {
           {runs.length === 0 ? (
             <Empty>정산 내역이 없어요. 월을 선택해 급여 대장을 만들어보세요.</Empty>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-gray-200">
+            <div className="table-wrap">
               <table className="w-full min-w-[640px] whitespace-nowrap text-sm">
-                <thead className="bg-gray-50 text-left text-xs text-gray-500">
+                <thead>
                   <tr>
                     {["귀속월", "지급일", "상태", "인원", "지급 총액", "실지급 총액"].map((h) => (
                       <th key={h} className="px-4 py-3 font-medium">

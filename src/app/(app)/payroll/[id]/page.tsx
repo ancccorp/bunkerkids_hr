@@ -72,7 +72,7 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
         연봉이 등록되지 않은 구성원과 휴직자는 제외됩니다.
       </p>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
+      <div className="table-wrap">
         <table className="w-full whitespace-nowrap text-right text-xs">
           <thead className="bg-gray-50 text-gray-500">
             <tr>

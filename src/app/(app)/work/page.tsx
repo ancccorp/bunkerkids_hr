@@ -104,7 +104,7 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
+      <div className="table-wrap">
         <table className="w-full min-w-[1000px] table-fixed text-xs">
           <thead>
             <tr className="border-b border-gray-200 text-left">

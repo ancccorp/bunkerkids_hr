@@ -67,9 +67,9 @@ export default async function ManagePeoplePage({
         <span className="ml-auto text-gray-500">{users.length}명</span>
       </form>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
+      <div className="table-wrap">
         <table className="w-full min-w-[1100px] whitespace-nowrap text-sm">
-          <thead className="bg-gray-50 text-left text-xs text-gray-500">
+          <thead>
             <tr>
               {["이름", "재직 상태", "사번", "입사일", "근속 기간", "이메일", "휴대전화번호", "조직 정보"].map((h) => (
                 <th key={h} className="px-4 py-3 font-medium">
