@@ -1,0 +1,184 @@
+// Demo data. Every person, phone number and email here is fictional.
+import type { DatabaseSync } from "node:sqlite";
+import { addDays, annualLeaveDays, DAY_MINUTES, isWeekend, startOfWeek, today } from "./dates";
+
+const COLORS = ["#f97066", "#9e77ed", "#36bffa", "#fdb022", "#32d583", "#ee46bc", "#6172f3", "#fd853a"];
+
+export function seed(db: DatabaseSync) {
+  const t = today();
+  const year = Number(t.slice(0, 4));
+  const ins = (sql: string, ...p: (string | number | null)[]) =>
+    Number(db.prepare(sql).run(...p).lastInsertRowid);
+
+  db.exec("BEGIN");
+  try {
+    // ── 조직 ──────────────────────────────────────────────
+    const dept = (name: string, parent: number | null) =>
+      ins("INSERT INTO departments (name, parent_id) VALUES (?, ?)", name, parent);
+    const root = dept("벙커키즈", null);
+    const business = dept("Business", root);
+    const product = dept("Product", root);
+    const mgmt = dept("MGMT", root);
+    const operation = dept("Operation", business);
+    const marketing = dept("Marketing", business);
+    const tech = dept("Tech", product);
+    const pm = dept("PM", product);
+
+    // ── 구성원 ────────────────────────────────────────────
+    type P = [name: string, title: string, dept: number, join: string, status?: string, role?: string];
+    const people: P[] = [
+      ["Jay", "CEO", root, "2023-03-02", "재직", "admin"],
+      ["Ed", "COO", business, "2024-03-05"],
+      ["Sora", "CPO", product, "2024-06-03"],
+      ["Bob", "HR Manager", mgmt, addDays(t, -54), "재직", "admin"],
+      ["Amy", "CS Manager", operation, "2026-03-01"],
+      ["Annie", "Operation Manager", operation, addDays(t, -35), "수습"],
+      ["Chloe", "Marketer", marketing, "2026-03-01"],
+      ["Crystal", "Marketer", marketing, "2025-09-01"],
+      ["Derrick", "Marketer", marketing, "2026-04-27"],
+      ["Betty", "Engineer", tech, "2025-07-16"],
+      ["Cohen", "Engineer", tech, addDays(t, -63), "수습"],
+      ["Dawny", "Engineer", tech, "2026-07-27"],
+      ["Logan", "Engineer", tech, "2025-05-20", "휴직"],
+      ["Brian", "PM", pm, "2026-03-01"],
+      ["Hana", "Designer", pm, "2025-11-10", "퇴사예정"],
+      ["Mina", "Operation", operation, addDays(t, 7), "재직"], // 입사 예정
+    ];
+    const ids: Record<string, number> = {};
+    people.forEach(([name, title, d, join, status = "재직", role = "member"], i) => {
+      ids[name] = ins(
+        `INSERT INTO users (name, title, email, phone, employee_no, join_date, leave_date, status, department_id, role, color)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        name,
+        title,
+        `${name.toLowerCase()}@bunkerkids.example`,
+        `010-0000-${String(1001 + i)}`,
+        `BK${join.replace(/-/g, "").slice(0, 6)}${String(i + 1).padStart(2, "0")}`,
+        join,
+        status === "퇴사예정" ? addDays(t, 30) : null,
+        status,
+        d,
+        role,
+        COLORS[i % COLORS.length],
+      );
+    });
+
+    // 결재권자: 상위 조직장이 기본 결재자
+    const setApprover = (d: number, u: number) => db.prepare("UPDATE departments SET approver_id = ? WHERE id = ?").run(u, d);
+    setApprover(root, ids.Jay);
+    for (const d of [business, operation, marketing]) setApprover(d, ids.Ed);
+    for (const d of [product, tech, pm]) setApprover(d, ids.Sora);
+    setApprover(mgmt, ids.Jay);
+
+    // ── 휴가 유형 ────────────────────────────────────────
+    const lt = (name: string, icon: string, desc: string, grant: number | null, annual = 0) =>
+      ins("INSERT INTO leave_types (name, icon, is_annual, grant_minutes, description) VALUES (?, ?, ?, ?, ?)", name, icon, annual, grant, desc);
+    const annual = lt("연차", "🏖️", "근로기준법 기준 연차", null, 1);
+    lt("배우자 출산", "👶", "신청 시 10일 부여", 10 * DAY_MINUTES);
+    lt("배우자 유산·사산", "🕊️", "신청 시 5일 부여", 5 * DAY_MINUTES);
+    lt("결혼 - 본인", "💍", "신청 시 5일 부여", 5 * DAY_MINUTES);
+    lt("조의 - 부모/배우자/자녀", "🤍", "신청 시 5일 부여", 5 * DAY_MINUTES);
+    lt("조의 - 조부모/형제/자매", "🤍", "신청 시 3일 부여", 3 * DAY_MINUTES);
+    lt("병가", "🩺", "연차 소진 시 60일", 60 * DAY_MINUTES);
+    lt("군소집훈련", "🎖️", "신청 시 부여", null);
+    lt("백신휴가", "💉", "신청 시 1일 부여", DAY_MINUTES);
+    lt("건강검진 휴가", "🏥", "신청 시 4시간 부여", 4 * 60);
+
+    for (const [name, , , join] of people) {
+      if (join > t) continue;
+      ins("INSERT INTO leave_grants (user_id, leave_type_id, year, minutes) VALUES (?, ?, ?, ?)",
+        ids[name], annual, year, annualLeaveDays(join, year) * DAY_MINUTES);
+    }
+
+    // ── 휴가 신청 ────────────────────────────────────────
+    const week = startOfWeek(t);
+    const leave = (who: string, start: string, end: string, unit: string, minutes: number, status: string,
+                   approver: string, st: string | null = null, et: string | null = null, reason = "개인 사유") =>
+      ins(`INSERT INTO leave_requests (user_id, leave_type_id, start_date, end_date, unit, start_time, end_time, minutes, reason, status, approver_id, created_at, decided_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ids[who], annual, start, end, unit, st, et, minutes, reason, status, ids[approver],
+        `${addDays(start, -7)} 10:00`, status === "pending" ? null : `${addDays(start, -6)} 11:00`);
+
+    leave("Sora", addDays(week, 4), addDays(week, 4), "day", DAY_MINUTES, "approved", "Jay");
+    leave("Betty", addDays(week, 4), addDays(week, 4), "day", DAY_MINUTES, "approved", "Sora");
+    leave("Chloe", week, week, "hours", 180, "approved", "Ed", "10:30", "13:30");
+    leave("Chloe", addDays(week, 2), addDays(week, 2), "hours", 180, "approved", "Ed", "10:30", "13:30");
+    leave("Bob", addDays(t, -12), addDays(t, -12), "hours", 120, "approved", "Jay", "17:00", "19:00");
+    leave("Bob", addDays(t, -14), addDays(t, -14), "day", DAY_MINUTES, "cancelled", "Jay");
+    leave("Bob", addDays(t, -20), addDays(t, -20), "hours", 120, "pending", "Jay", "10:00", "12:00");
+    leave("Amy", addDays(week, 9), addDays(week, 10), "day", 2 * DAY_MINUTES, "pending", "Ed", null, null, "가족 여행");
+    leave("Brian", addDays(week, 8), addDays(week, 8), "am", 4 * 60, "pending", "Sora", "10:00", "14:00");
+
+    // 연차를 다 쓴 신규 입사자 예시 (잔여 마이너스)
+    db.prepare("UPDATE leave_grants SET minutes = 0 WHERE user_id = ?").run(ids.Bob);
+
+    // ── 근무 기록 (기본 근무와 다른 날만 저장) ───────────
+    for (let i = 0; i < 5; i++) {
+      const d = addDays(week, i);
+      if (!isWeekend(d)) {
+        ins("INSERT INTO work_records (user_id, date, start_time, end_time) VALUES (?, ?, ?, ?)", ids.Brian, d, "09:00", "18:00");
+      }
+    }
+
+    // ── 공지 ──────────────────────────────────────────────
+    const notice = (title: string, emoji: string, category: string, body: string, author: string, ago: number) =>
+      ins("INSERT INTO notices (title, emoji, category, body, author_id, published_at) VALUES (?, ?, ?, ?, ?, ?)",
+        title, emoji, category, body, ids[author], `${addDays(t, -ago)} 21:26`);
+    const n1 = notice("휴가 결재라인 생성", "🌴", "사내규정",
+      `휴가 결재 라인이 생성되었습니다.
+
+앞으로 원활한 업무일정 조율과 팀 내 일정 파악을 위해 도입하게 되었습니다.
+따라서, 앞으로는 부서별 승인 후 휴가를 사용할 수 있도록 참고 부탁드립니다.
+
+✅ 결재라인
+- Product → Sora
+- Business → Ed
+
+🌴 휴가사용시
+- 휴가 사용 전에는 업무에 지장이 가지 않도록 팀과 조직장, 유관 협업자와 업무 일정을 조율해주세요.
+- 휴가 사용 시에는 조직장의 승인이 필요하오니 조직장에게 사전 공유 부탁 드립니다.
+- 가급적 휴가 사용 전까지 승인이 완료될 수 있도록 신경써 주시면 감사하겠습니다.`, "Bob", 60);
+    notice("워크플로우 문서 작성 안내", "📝", "사내규정",
+      `안녕하세요! 벙키 여러분
+
+최근 비품 구매, 비용 송금, 계약서 발송 등 경영지원팀(MGMT)으로 전달되는 요청사항이 다양해짐에 따라, 앞으로는 워크플로우를 통해 요청사항을 접수하고자 합니다.
+
+- 지출결의서(이체요청서): 비용 송금이 필요할 때
+- 비품 구매 요청: 업무용 장비·소모품
+- 지원금 신청: 교육/도서/AI 도구 지원금`, "Bob", 95);
+    notice("사내추천제도(Employee Referral)", "👫", "사내규정",
+      `안녕하세요! 여러분
+
+지금 우리는 벙커키즈의 폭발적인 성장을 함께 이끌어갈 훌륭한 동료들을 찾고 있습니다.
+추천하신 분이 최종 합류해 수습기간을 통과하면 추천 보상금을 지급합니다.`, "Jay", 100);
+    notice("법인카드 사용 공지", "💳", "사내규정",
+      `카드 사용법
+
+이용내역 및 잔여한도는 카드사 사이트를 통해 확인하실 수 있습니다.
+사용 후 영수증은 7일 이내에 워크플로우 > 지출결의서로 제출해 주세요.`, "Bob", 101);
+    for (const who of ["Amy", "Brian", "Chloe"]) {
+      db.prepare("INSERT INTO notice_reactions (notice_id, user_id, emoji) VALUES (?, ?, '👍')").run(n1, ids[who]);
+    }
+
+    // ── 워크플로우 문서 (Bob이 결재해야 할 문서) ─────────
+    const doc = (template: string, title: string, body: string, amount: number | null, author: string, ago: number, approvers: string[]) => {
+      const id = ins("INSERT INTO documents (template, title, body, amount, author_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        template, title, body, amount, ids[author], `${addDays(t, -ago)} 14:00`);
+      approvers.forEach((a, i) =>
+        ins("INSERT INTO approval_steps (document_id, step, approver_id, status) VALUES (?, ?, ?, ?)",
+          id, i + 1, ids[a], i === 0 ? "pending" : "waiting"));
+    };
+    doc("지원금 신청", "AI 도구 구독 지원금 신청", "업무용 AI 도구 연간 구독료 지원을 요청합니다.", 290000, "Betty", 6, ["Bob", "Jay"]);
+    doc("지출결의서(이체요청서)", "촬영 장비 렌탈 비용", "11월 콘텐츠 촬영 장비 렌탈 비용 이체 요청드립니다.", 450000, "Crystal", 6, ["Bob"]);
+    doc("지출결의서(이체요청서)", "오프라인 행사 부스 대관료", "12월 오프라인 행사 부스 대관료 선금입니다.", 1200000, "Amy", 7, ["Bob", "Jay"]);
+
+    // ── 인정 ──────────────────────────────────────────────
+    ins("INSERT INTO kudos (from_id, to_id, emoji, message, created_at) VALUES (?, ?, ?, ?, ?)",
+      ids.Sora, ids.Betty, "🚀", "배포 자동화 덕분에 릴리즈가 훨씬 편해졌어요!", `${addDays(t, -3)} 15:00`);
+
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+}
