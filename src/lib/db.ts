@@ -68,10 +68,10 @@ async function open(): Promise<Backend> {
   return backend;
 }
 
-/** 데모 데이터: SEED_DEMO 가 명시되지 않으면 개발 모드(Google 미설정)일 때만 넣는다. */
+/** 데모 데이터: SEED_DEMO 가 명시되지 않으면 로컬 개발 모드(Google 미설정, Vercel 아님)일 때만 넣는다. */
 function shouldSeedDemo() {
   if (process.env.SEED_DEMO) return process.env.SEED_DEMO === "true";
-  return !process.env.GOOGLE_CLIENT_ID;
+  return !process.env.GOOGLE_CLIENT_ID && !process.env.VERCEL;
 }
 
 function backend() {

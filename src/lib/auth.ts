@@ -8,16 +8,19 @@ import type { User } from "./queries";
 /**
  * 인증
  *  - google: Google Workspace OAuth. ALLOWED_EMAIL_DOMAIN 계정 중 구성원으로 등록된 이메일만 로그인.
- *  - dev   : 로그인 화면에서 구성원을 골라 들어간다. GOOGLE_CLIENT_ID 가 없으면 자동으로 dev.
+ *  - dev   : 로그인 화면에서 구성원을 골라 들어간다. 로컬에서 GOOGLE_CLIENT_ID 가 없을 때만.
+ *  - unconfigured: Vercel 등 배포 환경인데 Google 설정이 없을 때. 아무도 로그인할 수 없다
+ *    (배포본이 개발 모드로 열려 누구나 관리자로 들어오는 사고를 막는다).
  * 세션은 HMAC-SHA256 으로 서명한 쿠키(userId.만료시각.서명)이며 12시간 유효.
  */
 
 export const SESSION_COOKIE = "hr_session";
 const SESSION_HOURS = 12;
 
-export function authMode(): "google" | "dev" {
-  if (process.env.AUTH_MODE === "dev") return "dev";
-  return process.env.GOOGLE_CLIENT_ID ? "google" : "dev";
+export function authMode(): "google" | "dev" | "unconfigured" {
+  if (process.env.GOOGLE_CLIENT_ID) return "google";
+  if (process.env.VERCEL) return "unconfigured";
+  return "dev";
 }
 
 let devSecret: string | undefined;

@@ -52,7 +52,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </div>
           <h1 className="text-2xl font-bold tracking-tight">로그인</h1>
           <p className="mb-6 mt-1 text-sm text-ink-500">
-            {mode === "google" ? "회사 Google Workspace 계정으로 로그인하세요." : "개발 모드: 구성원을 골라 로그인하세요."}
+            {mode === "dev" ? "개발 모드: 구성원을 골라 로그인하세요." : "회사 Google Workspace 계정으로 로그인하세요."}
           </p>
           {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-600">{ERRORS[error] ?? "로그인에 실패했어요."}</p>}
           {mode === "google" ? (
@@ -65,6 +65,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               </svg>
               Google 계정으로 로그인
             </a>
+          ) : mode === "unconfigured" ? (
+            <p className="rounded-lg bg-amber-50 px-3 py-2.5 text-sm leading-relaxed text-amber-800">
+              Google 로그인이 아직 설정되지 않았어요. 관리자는 배포 환경 변수에 GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, AUTH_SECRET 을 넣고 다시 배포해주세요.
+            </p>
           ) : (
             <form action={devLogin} className="space-y-3">
               <select name="userId" className="input h-11" aria-label="구성원 선택">
