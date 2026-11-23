@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import { MIGRATIONS, SCHEMA, SCHEMA_VERSION } from "./schema";
 import { seed } from "./seed";
+import { isDemo } from "./demo";
 
 /**
  * Postgres 접근 계층.
@@ -41,9 +42,10 @@ async function postgresBackend(url: string): Promise<Backend> {
 }
 
 async function pgliteBackend(): Promise<Backend> {
-  if (process.env.VERCEL) throw new Error("Vercel 에서는 DATABASE_URL(Supabase 연결 문자열) 환경 변수가 필요합니다.");
+  if (process.env.VERCEL && !isDemo()) throw new Error("Vercel 에서는 DATABASE_URL(Supabase 연결 문자열) 환경 변수가 필요합니다.");
   const { PGlite } = await import("@electric-sql/pglite");
-  const dir = process.env.HR_DB_PATH ?? path.join(process.cwd(), "data", "pglite");
+  // 체험 모드는 메모리에만 저장 (배포 환경의 파일 시스템은 읽기 전용)
+  const dir = isDemo() ? "memory://" : process.env.HR_DB_PATH ?? path.join(process.cwd(), "data", "pglite");
   const pg = await PGlite.create(dir);
   type Q = { query: (q: string, p?: unknown[]) => Promise<{ rows: unknown[] }> };
   const run = (q: Q): Exec => async (text, params) => (await q.query(text, params)).rows as Row[];
@@ -51,7 +53,7 @@ async function pgliteBackend(): Promise<Backend> {
 }
 
 async function open(): Promise<Backend> {
-  const backend = process.env.DATABASE_URL ? await postgresBackend(process.env.DATABASE_URL) : await pgliteBackend();
+  const backend = process.env.DATABASE_URL && !isDemo() ? await postgresBackend(process.env.DATABASE_URL) : await pgliteBackend();
   await backend.begin(async (exec) => {
     await exec("SELECT pg_advisory_xact_lock(726354)", []); // 여러 인스턴스가 동시에 초기화하지 않도록
     await exec("CREATE TABLE IF NOT EXISTS schema_meta (version INTEGER NOT NULL)", []);
@@ -78,6 +80,7 @@ async function open(): Promise<Backend> {
 
 /** 데모 데이터: SEED_DEMO 가 명시되지 않으면 로컬 개발 모드(Google 미설정, Vercel 아님)일 때만 넣는다. */
 function shouldSeedDemo() {
+  if (isDemo()) return true;
   if (process.env.SEED_DEMO) return process.env.SEED_DEMO === "true";
   return !process.env.GOOGLE_CLIENT_ID && !process.env.VERCEL;
 }

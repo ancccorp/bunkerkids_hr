@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { get } from "./db";
 import { USER_COLUMNS, type User } from "./queries";
+import { isDemo } from "./demo";
 
 /**
  * 인증
@@ -22,6 +23,7 @@ const SESSION_HOURS = 12;
 export type AuthMode = "google" | "password" | "dev" | "unconfigured";
 
 export function authMode(): AuthMode {
+  if (isDemo()) return "dev"; // 체험 모드: 구성원 선택 로그인
   const hasSecret = (process.env.AUTH_SECRET ?? "").length >= 32;
   if (process.env.GOOGLE_CLIENT_ID) return hasSecret ? "google" : "unconfigured";
   if (process.env.VERCEL || process.env.AUTH_MODE === "password") return hasSecret ? "password" : "unconfigured";
@@ -34,7 +36,10 @@ function secret() {
   if (s && s.length >= 32) return s;
   // google·password 모드는 authMode() 가 AUTH_SECRET 을 요구하므로 여기 오지 않는다.
   // dev·unconfigured 는 임시 키를 쓴다 (dev: 서버 재시작 시 로그아웃, unconfigured: 애초에 로그인 불가).
-  devSecret ??= crypto.randomBytes(32).toString("hex");
+  // 체험 모드는 서버 인스턴스가 여러 개여도 세션이 유지되도록 배포마다 고정된 키를 쓴다 (가상 데이터만 다룸)
+  devSecret ??= isDemo()
+    ? crypto.createHash("sha256").update(`demo:${process.env.VERCEL_DEPLOYMENT_ID ?? process.env.VERCEL_URL ?? "local"}`).digest("hex")
+    : crypto.randomBytes(32).toString("hex");
   return devSecret;
 }
 

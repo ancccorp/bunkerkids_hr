@@ -3,6 +3,7 @@ import { authMode, sessionUser } from "@/lib/auth";
 import { listUsers } from "@/lib/queries";
 import Link from "next/link";
 import { devLogin, passwordLogin } from "@/app/actions";
+import { isDemo } from "@/lib/demo";
 
 const ERRORS: Record<string, string> = {
   state: "로그인 요청이 만료되었어요. 다시 시도해주세요.",
@@ -58,7 +59,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <h1 className="text-2xl font-bold tracking-tight">로그인</h1>
           <p className="mb-6 mt-1 text-sm text-ink-500">
             {mode === "dev"
-              ? "개발 모드: 구성원을 골라 로그인하세요."
+              ? isDemo()
+                ? "체험판: 구성원을 골라 들어가 보세요. 관리자(Jay, Bob)는 모든 메뉴를 볼 수 있어요."
+                : "개발 모드: 구성원을 골라 로그인하세요."
               : mode === "password"
                 ? "회사 이메일과 비밀번호로 로그인하세요."
                 : "회사 Google Workspace 계정으로 로그인하세요."}
@@ -114,7 +117,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               </select>
               <button className="btn-primary h-11 w-full text-[15px]">로그인</button>
               <p className="rounded-lg bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-700">
-                GOOGLE_CLIENT_ID 를 설정하면 Google 로그인으로 바뀝니다. 개발 모드의 데이터는 모두 가상입니다.
+                {isDemo()
+                  ? "체험판의 사람·금액은 모두 가상 데이터예요. 실제 회사 데이터와는 분리되어 있어요."
+                  : "GOOGLE_CLIENT_ID 를 설정하면 Google 로그인으로 바뀝니다. 개발 모드의 데이터는 모두 가상입니다."}
               </p>
             </form>
           )}
