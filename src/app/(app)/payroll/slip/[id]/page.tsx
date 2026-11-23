@@ -9,12 +9,12 @@ import { PrintButton } from "@/components/PrintButton";
 export default async function PayslipPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const me = await currentUser();
-  const p = get<{ id: number; user_id: number; detail: string; memo: string | null; month: string; pay_date: string; status: string; name: string; title: string | null; employee_no: string | null; dependents: number }>(
+  const p = await get<{ id: number; user_id: number; detail: string; memo: string | null; month: string; pay_date: string; status: string; name: string; title: string | null; employee_no: string | null; dependents: number }>(
     `SELECT p.*, r.month, r.pay_date, r.status, u.name, u.title, u.employee_no, u.dependents
      FROM payslips p JOIN payroll_runs r ON r.id = p.run_id JOIN users u ON u.id = p.user_id WHERE p.id = ?`, Number(id));
   if (!p || (me.role !== "admin" && (p.user_id !== me.id || p.status !== "confirmed"))) notFound();
   const d = JSON.parse(p.detail) as PayDetail;
-  const s = getSettings();
+  const s = await getSettings();
 
   const pay: [string, number, string][] = [
     ["기본급", d.base, d.proration < 1 ? `월 기본급 × 재직일 비율 ${Math.round(d.proration * 1000) / 10}%` : "연봉 ÷ 12 − 식대"],

@@ -8,9 +8,9 @@ import { approveDocument, cancelDocument, rejectDocument } from "@/app/actions";
 export default async function DocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const me = await currentUser();
-  const doc = getDocument(Number(id));
+  const doc = await getDocument(Number(id));
   if (!doc) notFound();
-  const steps = documentSteps(doc.id);
+  const steps = await documentSteps(doc.id);
   const involved = doc.author_id === me.id || steps.some((s) => s.approver_id === me.id) || me.role === "admin";
   if (!involved) notFound();
   const current = steps.find((s) => s.status === "pending");

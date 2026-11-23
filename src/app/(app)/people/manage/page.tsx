@@ -16,8 +16,8 @@ export default async function ManagePeoplePage({
   const view = sp.view ?? "all";
   const statuses = sp.status ? ([] as string[]).concat(sp.status) : ["재직", "수습", "휴직", "퇴사예정"];
   const t = today();
-  const depts = listDepartments();
-  let users = listUsers({ statuses: view === "all" ? statuses : undefined, q: sp.q });
+  const depts = await listDepartments();
+  let users = await listUsers({ statuses: view === "all" ? statuses : undefined, q: sp.q });
   if (view === "joining") users = users.filter((u) => u.join_date > t || u.status === "수습");
   if (view === "leaving") users = users.filter((u) => u.status === "퇴사예정" || u.status === "퇴사");
 

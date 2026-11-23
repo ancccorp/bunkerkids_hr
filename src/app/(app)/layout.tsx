@@ -9,8 +9,8 @@ import { Avatar } from "@/components/ui";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const me = await currentUser();
-  const todoCount = todosFor(me.id).length;
-  const signCount = get<{ n: number }>("SELECT COUNT(*) AS n FROM contracts WHERE user_id = ? AND status = 'sent'", me.id)!.n;
+  const todoCount = (await todosFor(me.id)).length;
+  const signCount = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM contracts WHERE user_id = ? AND status = 'sent'", me.id))!.n;
 
   const account = (
     <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
@@ -34,10 +34,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen flex-col lg:flex-row">
       <Sidebar
         isAdmin={me.role === "admin"}
-        isApprover={isApprover(me.id)}
+        isApprover={await isApprover(me.id)}
         todoCount={todoCount}
         signCount={signCount}
-        companyName={getSettings().company_name}
+        companyName={(await getSettings()).company_name}
         account={account}
       />
       <main className="min-w-0 flex-1 bg-white lg:my-2 lg:mr-2 lg:rounded-2xl lg:border lg:border-ink-200/70 lg:shadow-card">{children}</main>

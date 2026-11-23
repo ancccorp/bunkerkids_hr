@@ -10,11 +10,11 @@ import { confirmPayroll, deletePayrollRun, recalcPayroll, updatePayslip } from "
 export default async function PayrollRunPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
   const { id } = await params;
-  const r = get<{ id: number; month: string; pay_date: string; status: string; confirmed_at: string | null }>(
+  const r = await get<{ id: number; month: string; pay_date: string; status: string; confirmed_at: string | null }>(
     "SELECT * FROM payroll_runs WHERE id = ?", Number(id));
   if (!r) notFound();
-  const slips = all<{ id: number; name: string; title: string | null; detail: string; extra_pay: number; extra_deduction: number; memo: string | null }>(
-    "SELECT p.*, u.name, u.title FROM payslips p JOIN users u ON u.id = p.user_id WHERE p.run_id = ? ORDER BY u.name COLLATE NOCASE", r.id);
+  const slips = await all<{ id: number; name: string; title: string | null; detail: string; extra_pay: number; extra_deduction: number; memo: string | null }>(
+    "SELECT p.*, u.name, u.title FROM payslips p JOIN users u ON u.id = p.user_id WHERE p.run_id = ? ORDER BY lower(u.name)", r.id);
   const rows = slips.map((s) => ({ ...s, d: JSON.parse(s.detail) as PayDetail }));
   const sum = (k: keyof PayDetail) => rows.reduce((a, x) => a + (x.d[k] as number), 0);
   const draft = r.status === "draft";

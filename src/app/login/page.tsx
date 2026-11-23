@@ -16,7 +16,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (await sessionUser()) redirect("/");
   const { error } = await searchParams;
   const mode = authMode();
-  const users = mode === "dev" ? listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] }) : [];
+  const users = mode === "dev" ? await listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] }) : [];
 
   return (
     <main className="grid min-h-screen bg-white lg:grid-cols-[1.1fr_1fr]">

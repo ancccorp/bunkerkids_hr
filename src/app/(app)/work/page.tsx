@@ -15,14 +15,14 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
   const mine = sp.view === "me";
   const deptId = Number(sp.dept) || null;
-  const depts = listDepartments();
-  const settings = getSettings();
-  const holidays = holidayMap(week, addDays(week, 6));
+  const depts = await listDepartments();
+  const settings = await getSettings();
+  const holidays = await holidayMap(week, addDays(week, 6));
 
-  let users = listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] });
+  let users = await listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] });
   if (mine) users = users.filter((u) => u.id === me.id);
   if (deptId) users = users.filter((u) => u.department_id === deptId || depts.find((d) => d.id === u.department_id)?.parent_id === deptId);
-  const rows = weeklySchedule(users, week);
+  const rows = await weeklySchedule(users, week);
   const leaveCount = new Set(rows.filter((r) => r.cells.some((c) => c.blocks.some((b) => b.kind === "leave"))).map((r) => r.user.id)).size;
 
   const q = (w: string) => `/work?week=${w}${mine ? "&view=me" : ""}${deptId ? `&dept=${deptId}` : ""}`;
@@ -44,7 +44,7 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
               <div>
                 <label className="label">구성원</label>
                 <select name="user_id" className="input" defaultValue={me.id}>
-                  {listUsers({ statuses: ["재직", "수습"] }).map((u) => (
+                  {(await listUsers({ statuses: ["재직", "수습"] })).map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}
                     </option>

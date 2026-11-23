@@ -12,12 +12,12 @@ export default async function NoticesPage({ searchParams }: { searchParams: Prom
   const me = await currentUser();
   const isAdmin = me.role === "admin";
   const tab = sp.tab === "hidden" && isAdmin ? "hidden" : "all";
-  const notices = listNotices(isAdmin).filter((n) => (tab === "hidden" ? n.hidden : !n.hidden));
+  const notices = (await listNotices(isAdmin)).filter((n) => (tab === "hidden" ? n.hidden : !n.hidden));
   const selectedId = Number(sp.id) || notices[0]?.id;
-  const selected = selectedId ? getNotice(selectedId) : undefined;
+  const selected = selectedId ? await getNotice(selectedId) : undefined;
   const visible = selected && (!selected.hidden || isAdmin) ? selected : undefined;
-  const reactions = visible ? noticeReactions(visible.id) : [];
-  const comments = visible ? noticeComments(visible.id) : [];
+  const reactions = visible ? await noticeReactions(visible.id) : [];
+  const comments = visible ? await noticeComments(visible.id) : [];
 
   return (
     <div className="flex h-full flex-col">

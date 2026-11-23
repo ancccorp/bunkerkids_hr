@@ -10,7 +10,7 @@ import { Modal } from "@/components/Modal";
 export default async function LeaveManagePage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const me = await currentUser();
   const isAdmin = me.role === "admin";
-  if (!isAdmin && !isApprover(me.id)) redirect("/time-off");
+  if (!isAdmin && !await isApprover(me.id)) redirect("/time-off");
   const sp = await searchParams;
   const view = isAdmin ? sp.view ?? "requests" : "requests";
 
@@ -24,7 +24,7 @@ export default async function LeaveManagePage({ searchParams }: { searchParams: 
               <div>
                 <label className="label">구성원</label>
                 <select name="user_id" className="input">
-                  {listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] }).map((u) => (
+                  {(await listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] })).map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}
                     </option>
@@ -58,11 +58,11 @@ export default async function LeaveManagePage({ searchParams }: { searchParams: 
   );
 }
 
-function Requests({ myId, isAdmin }: { myId: number; isAdmin: boolean }) {
+async function Requests({ myId, isAdmin }: { myId: number; isAdmin: boolean }) {
   // 관리자는 전체, 결재권자는 본인에게 올라온 신청만
   const scope = isAdmin ? {} : { approverId: myId };
-  const pending = listLeaveRequests({ ...scope, status: "pending" });
-  const recent = listLeaveRequests(scope).filter((r) => r.status !== "pending").slice(0, 20);
+  const pending = await listLeaveRequests({ ...scope, status: "pending" });
+  const recent = (await listLeaveRequests(scope)).filter((r) => r.status !== "pending").slice(0, 20);
   return (
     <>
       <h2 className="mb-2 mt-6 text-sm font-semibold">승인 대기 {pending.length}</h2>
@@ -110,8 +110,8 @@ function Requests({ myId, isAdmin }: { myId: number; isAdmin: boolean }) {
   );
 }
 
-function Balances() {
-  const users = listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] });
+async function Balances() {
+  const users = await listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] });
   return (
     <div className="mt-6 table-wrap">
       <table className="w-full min-w-[640px] whitespace-nowrap text-sm">
@@ -125,8 +125,7 @@ function Balances() {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {users.map((u) => {
-            const a = annualBalance(u);
+          {(await Promise.all(users.map(async (u) => ({ u, a: await annualBalance(u) })))).map(({ u, a }) => {
             return (
               <tr key={u.id}>
                 <td className="px-4 py-2.5">

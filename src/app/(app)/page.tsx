@@ -45,24 +45,24 @@ export default async function Home() {
   const week = startOfWeek(t);
   const isAdmin = me.role === "admin";
 
-  const todos = todosFor(me.id);
-  const signCount = get<{ n: number }>("SELECT COUNT(*) AS n FROM contracts WHERE user_id = ? AND status = 'sent'", me.id)!.n;
-  const annual = annualBalance(me);
-  const myWeek = weeklySchedule([me], week)[0];
-  const notices = listNotices().slice(0, 4);
-  const kudos = listKudos(3);
-  const users = listUsers({ statuses: ACTIVE });
+  const todos = await todosFor(me.id);
+  const signCount = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM contracts WHERE user_id = ? AND status = 'sent'", me.id))!.n;
+  const annual = await annualBalance(me);
+  const myWeek = (await weeklySchedule([me], week))[0];
+  const notices = (await listNotices()).slice(0, 4);
+  const kudos = await listKudos(3);
+  const users = await listUsers({ statuses: ACTIVE });
   const colleagues = users.filter((u) => u.id !== me.id && u.status !== "휴직");
 
   // 오늘·이번 주 일정
-  const todayOff = listLeaveRequests({ from: t, to: t }).filter((l) => l.status === "approved");
-  const holidays = [...holidayMap(t, addDays(t, 60))].slice(0, 3);
-  const myNext = listLeaveRequests({ userId: me.id })
+  const todayOff = (await listLeaveRequests({ from: t, to: t })).filter((l) => l.status === "approved");
+  const holidays = [...(await holidayMap(t, addDays(t, 60)))].slice(0, 3);
+  const myNext = (await listLeaveRequests({ userId: me.id }))
     .filter((l) => l.end_date >= t && (l.status === "approved" || l.status === "pending"))
     .sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
-  const weekHolidays = holidayMap(days[0], days[6]);
-  const weekOff = listLeaveRequests({ from: days[0], to: days[6] }).filter((l) => l.status === "approved");
+  const weekHolidays = await holidayMap(days[0], days[6]);
+  const weekOff = (await listLeaveRequests({ from: days[0], to: days[6] })).filter((l) => l.status === "approved");
   const plannedMinutes = days.slice(0, 5).filter((x) => !weekHolidays.has(x)).length * 480;
 
   return (
@@ -284,21 +284,21 @@ export default async function Home() {
 }
 
 /** 관리자용 HR 현황 */
-function AdminOverview({ users, today: t }: { users: User[]; today: string }) {
+async function AdminOverview({ users, today: t }: { users: User[]; today: string }) {
   const month = t.slice(0, 7);
   const working = users.filter((u) => u.join_date <= t && u.status !== "휴직");
   const probation = users.filter((u) => u.status === "수습");
   const onLeave = users.filter((u) => u.status === "휴직");
   const joining = users.filter((u) => u.join_date.slice(0, 7) === month || u.join_date > t).sort((a, b) => a.join_date.localeCompare(b.join_date));
   const leaving = users.filter((u) => u.status === "퇴사예정" || (u.leave_date && u.leave_date >= t)).sort((a, b) => (a.leave_date ?? "").localeCompare(b.leave_date ?? ""));
-  const pendingLeaves = listLeaveRequests({ status: "pending" }).length;
-  const pendingContracts = get<{ n: number }>("SELECT COUNT(*) AS n FROM contracts WHERE status = 'sent'")!.n;
-  const run = get<{ id: number; status: string; gross: number; net: number }>(
+  const pendingLeaves = (await listLeaveRequests({ status: "pending" })).length;
+  const pendingContracts = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM contracts WHERE status = 'sent'"))!.n;
+  const run = await get<{ id: number; status: string; gross: number; net: number }>(
     `SELECT r.id, r.status, COALESCE(SUM(p.gross),0) AS gross, COALESCE(SUM(p.net),0) AS net
      FROM payroll_runs r LEFT JOIN payslips p ON p.run_id = r.id WHERE r.month = ? GROUP BY r.id`, month);
 
   // 연차 사용률 (현재 산정 기간 기준, 재직 중인 구성원)
-  const balances = working.map((u) => annualBalance(u, t));
+  const balances = await Promise.all(working.map((u) => annualBalance(u, t)));
   const granted = balances.reduce((a, b) => a + b.granted, 0);
   const used = balances.reduce((a, b) => a + b.used, 0);
   const lowUse = working
@@ -307,7 +307,7 @@ function AdminOverview({ users, today: t }: { users: User[]; today: string }) {
     .slice(0, 4);
 
   // 최상위 바로 아래 조직별 인원 (하위 조직 포함)
-  const depts = listDepartments();
+  const depts = await listDepartments();
   const root = depts.find((x) => x.parent_id == null);
   const groups = depts.filter((x) => x.parent_id === root?.id);
   const topOf = (deptId: number | null): number | null => {
@@ -321,7 +321,7 @@ function AdminOverview({ users, today: t }: { users: User[]; today: string }) {
   const counts = groups.map((g) => ({ g, n: working.filter((u) => topOf(u.department_id) === g.id).length }));
   const maxCount = Math.max(1, ...counts.map((c) => c.n));
 
-  const recentSigned = all<{ n: number }>("SELECT COUNT(*) AS n FROM contracts WHERE status = 'signed' AND signed_at >= ?", addDays(t, -30))[0].n;
+  const recentSigned = (await all<{ n: number }>("SELECT COUNT(*) AS n FROM contracts WHERE status = 'signed' AND signed_at >= ?", addDays(t, -30)))[0].n;
 
   return (
     <section className="mt-10">

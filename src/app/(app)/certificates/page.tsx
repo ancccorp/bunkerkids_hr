@@ -10,7 +10,7 @@ const TYPE_LABEL: Record<string, string> = { employment: "재직증명서", care
 export default async function CertificatesPage() {
   const me = await currentUser();
   const isAdmin = me.role === "admin";
-  const rows = all<{ id: number; type: string; purpose: string; issue_no: string; issued_at: string; name: string }>(
+  const rows = await all<{ id: number; type: string; purpose: string; issue_no: string; issued_at: string; name: string }>(
     `SELECT c.*, u.name FROM certificates c JOIN users u ON u.id = c.user_id ${isAdmin ? "" : "WHERE c.user_id = ?"} ORDER BY c.id DESC LIMIT 100`,
     ...(isAdmin ? [] : [me.id]),
   );
@@ -25,7 +25,7 @@ export default async function CertificatesPage() {
             <div>
               <label className="label">대상 구성원 (관리자)</label>
               <select name="user_id" className="input" defaultValue={me.id}>
-                {listUsers().map((u) => (
+                {(await listUsers()).map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name} ({u.status})
                   </option>

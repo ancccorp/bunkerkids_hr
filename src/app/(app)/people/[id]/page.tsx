@@ -8,15 +8,15 @@ import { MemberForm } from "@/components/MemberForm";
 export default async function MemberPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const me = await currentUser();
-  const user = getUser(Number(id));
+  const user = await getUser(Number(id));
   if (!user) notFound();
-  const depts = listDepartments();
+  const depts = await listDepartments();
   const isAdmin = me.role === "admin";
   const canSeePrivate = isAdmin || me.id === user.id;
   const year = Number(today().slice(0, 4));
-  const annual = annualBalance(user);
-  const adjustments = isAdmin ? listAdjustments(user.id) : [];
-  const leaves = listLeaveRequests({ userId: user.id, year }).slice(0, 5);
+  const annual = await annualBalance(user);
+  const adjustments = isAdmin ? await listAdjustments(user.id) : [];
+  const leaves = (await listLeaveRequests({ userId: user.id, year })).slice(0, 5);
 
   return (
     <PageShell>

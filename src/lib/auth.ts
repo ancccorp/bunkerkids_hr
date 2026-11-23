@@ -71,7 +71,7 @@ const USER_SQL = "SELECT u.*, d.name AS department_name FROM users u LEFT JOIN d
 /** 로그인하지 않았으면 null */
 export async function sessionUser(): Promise<User | null> {
   const id = verifySessionValue((await cookies()).get(SESSION_COOKIE)?.value);
-  return id ? get<User>(USER_SQL, id) ?? null : null;
+  return id ? await get<User>(USER_SQL, id) ?? null : null;
 }
 
 /** 로그인 필수. 없으면 /login 으로 보낸다. */

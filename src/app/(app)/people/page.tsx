@@ -4,7 +4,7 @@ import { Avatar, PageShell, StatusBadge } from "@/components/ui";
 
 export default async function PeoplePage({ searchParams }: { searchParams: Promise<{ q?: string; dept?: string }> }) {
   const sp = await searchParams;
-  const depts = listDepartments();
+  const depts = await listDepartments();
   const deptId = Number(sp.dept) || null;
   // 선택한 조직과 그 하위 조직의 구성원
   const within = new Set<number>();
@@ -15,7 +15,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
     };
     walk(deptId);
   }
-  const users = listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"], q: sp.q }).filter(
+  const users = (await listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"], q: sp.q })).filter(
     (u) => !deptId || (u.department_id && within.has(u.department_id)),
   );
 

@@ -7,8 +7,8 @@ const TEMPLATES = ["지출결의서(이체요청서)", "비품 구매 요청", "
 
 export default async function NewDocumentPage() {
   const me = await currentUser();
-  const users = listUsers({ statuses: ["재직", "수습"] }).filter((u) => u.id !== me.id);
-  const defaultApprover = findApprover(me.id);
+  const users = (await listUsers({ statuses: ["재직", "수습"] })).filter((u) => u.id !== me.id);
+  const defaultApprover = await findApprover(me.id);
 
   return (
     <PageShell>

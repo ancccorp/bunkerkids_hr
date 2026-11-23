@@ -8,7 +8,7 @@ import { PrintButton } from "@/components/PrintButton";
 export default async function CertificatePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const me = await currentUser();
-  const c = get<{ id: number; user_id: number; type: string; purpose: string; issue_no: string; snapshot: string; issued_at: string }>(
+  const c = await get<{ id: number; user_id: number; type: string; purpose: string; issue_no: string; snapshot: string; issued_at: string }>(
     "SELECT * FROM certificates WHERE id = ?", Number(id));
   if (!c || (c.user_id !== me.id && me.role !== "admin")) notFound();
   const s = JSON.parse(c.snapshot) as CertificateSnapshot;

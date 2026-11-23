@@ -22,7 +22,7 @@
 
 ## 실행
 
-Node.js 22.13 이상이 필요합니다 (내장 `node:sqlite` 사용, 별도 DB 설치 불필요).
+Node.js 22.13 이상이 필요합니다. DB는 Postgres(운영: Supabase)이며, `DATABASE_URL`이 없으면 내장 Postgres(PGlite)를 `data/pglite`에 만들어 쓰므로 로컬에서는 별도 설치가 필요 없습니다.
 
 ```bash
 npm install
@@ -31,15 +31,18 @@ npm test           # 연차·급여 계산 단위 테스트
 ```
 
 `.env.local`이 없으면 **개발 모드**입니다: 로그인 화면에서 구성원을 골라 들어가고, 가상의 데모 데이터가 들어갑니다.
-DB를 초기화하려면 `npm run db:reset` 후 서버를 재시작하세요.
+로컬 DB를 초기화하려면 `npm run db:reset` 후 서버를 재시작하세요.
 
-## 운영 배포
+## 운영 배포 (Supabase + Vercel)
 
-1. `.env.example`을 `.env.local`로 복사하고 Google OAuth 클라이언트, `AUTH_SECRET`, `ALLOWED_EMAIL_DOMAIN`, `APP_URL`, `BOOTSTRAP_ADMIN_EMAIL`을 채웁니다.
-2. `npm run build && npm start`. Google이 설정되면 데모 데이터 없이 빈 DB(휴가 유형·공휴일만)로 시작합니다.
-3. `BOOTSTRAP_ADMIN_EMAIL` 계정으로 로그인 → 설정에서 회사 정보·조직·결재라인을 입력 → 구성원을 등록합니다.
+1. **Supabase**: 새 프로젝트를 Northeast Asia (Seoul) 리전에 만들고, Connect › Direct › **Transaction pooler**(포트 6543) 연결 문자열을 확인합니다.
+2. **Google Cloud Console**: OAuth 클라이언트(웹 애플리케이션)를 만들고 승인된 리디렉션 URI에 `{APP_URL}/api/auth/callback`을 등록합니다.
+3. **Vercel**: GitHub 저장소를 Import하고 Environment Variables에 `.env.example`의 값을 넣습니다
+   (`DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_EMAIL_DOMAIN`, `APP_URL`, `AUTH_SECRET`, `BOOTSTRAP_ADMIN_EMAIL`). Vercel 함수 리전은 Seoul(icn1)로 맞추면 DB와 가까워집니다.
+4. 첫 요청 때 테이블이 자동 생성되고, 운영 모드에서는 데모 데이터 없이 휴가 유형·공휴일만 들어갑니다.
+5. `BOOTSTRAP_ADMIN_EMAIL` 계정으로 로그인 → 설정에서 회사 정보·조직·결재라인을 입력 → 구성원을 등록합니다.
    구성원의 회사 이메일이 Google 계정과 같아야 로그인할 수 있습니다.
-4. `data/hr.db`(또는 `HR_DB_PATH`)를 매일 백업하세요. 단일 서버용 SQLite입니다.
+6. 백업은 Supabase가 매일 자동으로 합니다 (Pro 요금제에서 7일 보관).
 
 ## 구조
 
@@ -48,6 +51,7 @@ src/lib/leave-policy.ts   연차 산정 (순수 함수, 테스트 대상)
 src/lib/payroll.ts        급여·4대보험·간이세액 계산 (순수 함수, 테스트 대상)
 src/lib/holidays.ts       2025–2027 공휴일 기본값
 src/lib/contracts.ts      계약서 양식
+src/lib/db.ts             Postgres 접근 (postgres.js / 로컬 PGlite), 스키마 자동 생성
 src/lib/settings*.ts      회사 설정 기본값과 조회
 src/lib/queries.ts        조회 + 근무표·잔여 연차
 src/lib/hr.ts             급여 대장 생성, 증명서 스냅샷
@@ -62,4 +66,4 @@ tests/                    단위 테스트
 - 소득세는 간이세액표 산식을 단순화한 **추정치**입니다. 지급 전 국세청 간이세액표와 대조하세요.
 - 전자계약은 본인 확인(회사 Google 계정) + 동의 + 이름 입력 + 문서 해시 방식입니다. 공인 전자서명이 필요한 계약에는 별도 서비스를 쓰세요.
 - 4대보험 요율·국민연금 상하한·공휴일은 매년 설정에서 갱신해야 합니다.
-- 스키마가 바뀌면 `PRAGMA user_version`으로 감지하며, 운영 데이터가 생긴 뒤에는 마이그레이션 스크립트가 필요합니다.
+- 스키마 버전은 `schema_meta` 테이블로 관리합니다. 운영 데이터가 생긴 뒤 스키마를 바꾸면 마이그레이션 코드를 추가해야 합니다.

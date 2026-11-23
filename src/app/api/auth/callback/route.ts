@@ -42,12 +42,12 @@ export async function GET(req: Request) {
   const domain = allowedDomain();
   if (domain && info.hd !== domain && !email.endsWith(`@${domain}`)) return fail(req, "domain");
 
-  let user = get<{ id: number }>("SELECT id FROM users WHERE lower(email) = ? AND status != '퇴사'", email);
+  let user = await get<{ id: number }>("SELECT id FROM users WHERE lower(email) = ? AND status != '퇴사'", email);
   // 최초 배포: 아직 아무 관리자도 없고 BOOTSTRAP_ADMIN_EMAIL 이면 관리자 계정을 만든다.
   if (!user && email === process.env.BOOTSTRAP_ADMIN_EMAIL?.toLowerCase()) {
-    const admins = get<{ n: number }>("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'")!.n;
+    const admins = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'"))!.n;
     if (admins === 0) {
-      const id = run("INSERT INTO users (name, email, join_date, status, role) VALUES (?, ?, ?, '재직', 'admin')", info.name ?? email, email, today());
+      const id = await run("INSERT INTO users (name, email, join_date, status, role) VALUES (?, ?, ?, '재직', 'admin')", info.name ?? email, email, today());
       user = { id };
     }
   }

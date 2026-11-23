@@ -2,6 +2,7 @@ node_modules/
 .next/
 out/
 data/*.db
+data/pglite/
 data/*.db-*
 *.tsbuildinfo
 next-env.d.ts

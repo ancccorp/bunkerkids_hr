@@ -17,7 +17,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   await requireAdmin();
   const sp = await searchParams;
   const tab = TABS.some(([k]) => k === sp.tab) ? sp.tab! : "company";
-  const s = getSettings();
+  const s = await getSettings();
 
   const field = (key: SettingKey, label: string, type = "text", hint?: string) => (
     <div>
@@ -108,9 +108,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   );
 }
 
-function OrgSettings() {
-  const depts = listDepartments();
-  const users = listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] });
+async function OrgSettings() {
+  const depts = await listDepartments();
+  const users = await listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] });
   const row = (d?: (typeof depts)[number]) => (
     <form key={d?.id ?? "new"} action={saveDepartment} className="grid items-end gap-2 border-b border-gray-100 py-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
       {d && <input type="hidden" name="id" value={d.id} />}
@@ -157,8 +157,8 @@ function OrgSettings() {
   );
 }
 
-function HolidaySettings({ year }: { year: number }) {
-  const holidays = listHolidays(year);
+async function HolidaySettings({ year }: { year: number }) {
+  const holidays = await listHolidays(year);
   return (
     <div className="card p-6">
       <div className="flex items-center justify-between">

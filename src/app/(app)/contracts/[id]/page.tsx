@@ -22,7 +22,7 @@ type Contract = {
 export default async function ContractPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const me = await currentUser();
-  const c = get<Contract>("SELECT c.*, u.name FROM contracts c JOIN users u ON u.id = c.user_id WHERE c.id = ?", Number(id));
+  const c = await get<Contract>("SELECT c.*, u.name FROM contracts c JOIN users u ON u.id = c.user_id WHERE c.id = ?", Number(id));
   if (!c || (c.user_id !== me.id && me.role !== "admin")) notFound();
   const canSign = c.user_id === me.id && c.status === "sent";
 

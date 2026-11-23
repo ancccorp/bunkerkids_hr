@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/auth";
 import { CONTRACT_TEMPLATES, fillTemplate } from "@/lib/contracts";
-import { departmentPath, getUser, listUsers } from "@/lib/queries";
+import { departmentPath, getUser, listDepartments, listUsers } from "@/lib/queries";
 import { getSettings } from "@/lib/settings";
 import { fmtDate, today } from "@/lib/dates";
 import { PageShell } from "@/components/ui";
@@ -9,11 +9,11 @@ import { createContract } from "@/app/actions";
 export default async function NewContractPage({ searchParams }: { searchParams: Promise<{ user?: string; template?: string; salary?: string }> }) {
   await requireAdmin();
   const sp = await searchParams;
-  const users = listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] });
-  const user = getUser(Number(sp.user)) ?? users[0];
+  const users = await listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] });
+  const user = await getUser(Number(sp.user)) ?? users[0];
   const templateKey = sp.template && sp.template in CONTRACT_TEMPLATES ? sp.template : "근로계약서";
   const tpl = CONTRACT_TEMPLATES[templateKey];
-  const s = getSettings();
+  const s = await getSettings();
   const salary = Number(sp.salary) || user?.annual_salary || 0;
   const body = user
     ? fillTemplate(tpl.body, {
@@ -22,7 +22,7 @@ export default async function NewContractPage({ searchParams }: { searchParams: 
         address: s.company_address,
         name: user.name,
         title: user.title ?? "",
-        department: departmentPath(user.department_id).join(" › "),
+        department: departmentPath(user.department_id, await listDepartments()).join(" › "),
         start_date: fmtDate(user.join_date, false),
         annual_salary: salary.toLocaleString("ko-KR"),
         monthly_salary: Math.round(salary / 12).toLocaleString("ko-KR"),

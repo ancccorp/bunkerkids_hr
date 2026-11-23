@@ -8,8 +8,8 @@ export default async function WorkflowPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const me = await currentUser();
   const view = sp.view ?? "todo";
-  const todos = todosFor(me.id);
-  const docs = view === "mine" ? listDocuments({ authorId: me.id }) : view === "all" && me.role === "admin" ? listDocuments() : listDocuments({ involving: me.id });
+  const todos = await todosFor(me.id);
+  const docs = view === "mine" ? await listDocuments({ authorId: me.id }) : view === "all" && me.role === "admin" ? await listDocuments() : await listDocuments({ involving: me.id });
 
   return (
     <PageShell>

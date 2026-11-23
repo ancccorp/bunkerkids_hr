@@ -12,14 +12,14 @@ export default async function TimeOffPage({ searchParams }: { searchParams: Prom
   const me = await currentUser();
   const t = today();
   const year = Number(sp.year) || Number(t.slice(0, 4));
-  const balances = leaveBalances(me);
+  const balances = await leaveBalances(me);
   const annual = balances.find((b) => b.annual)!.annual!;
-  const types = listLeaveTypes();
-  const requests = listLeaveRequests({ userId: me.id, year });
+  const types = await listLeaveTypes();
+  const requests = await listLeaveRequests({ userId: me.id, year });
   const upcoming = requests.filter((r) => r.end_date >= t && r.status !== "cancelled" && r.status !== "rejected");
   const past = requests.filter((r) => !upcoming.includes(r));
-  const approverId = findApprover(me.id);
-  const approverName = approverId ? getUser(approverId)?.name ?? null : null;
+  const approverId = await findApprover(me.id);
+  const approverName = approverId ? (await getUser(approverId))?.name ?? null : null;
   const shown = sp.all ? balances : balances.slice(0, 10);
 
   const row = (r: (typeof requests)[number], canCancel: boolean) => (

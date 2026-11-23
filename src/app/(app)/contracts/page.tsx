@@ -8,7 +8,7 @@ import { CONTRACT_STATUS } from "@/lib/contracts";
 export default async function ContractsPage() {
   const me = await currentUser();
   const isAdmin = me.role === "admin";
-  const rows = all<{ id: number; title: string; status: string; created_at: string; signed_at: string | null; name: string }>(
+  const rows = await all<{ id: number; title: string; status: string; created_at: string; signed_at: string | null; name: string }>(
     `SELECT c.id, c.title, c.status, c.created_at, c.signed_at, u.name FROM contracts c JOIN users u ON u.id = c.user_id
      ${isAdmin ? "" : "WHERE c.user_id = ? AND c.status != 'void'"} ORDER BY c.id DESC`,
     ...(isAdmin ? [] : [me.id]),

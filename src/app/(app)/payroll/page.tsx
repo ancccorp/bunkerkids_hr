@@ -8,13 +8,13 @@ import { createPayrollRun } from "@/app/actions";
 
 export default async function PayrollPage() {
   const me = await currentUser();
-  const mySlips = all<{ id: number; month: string; pay_date: string; net: number; gross: number }>(
+  const mySlips = await all<{ id: number; month: string; pay_date: string; net: number; gross: number }>(
     `SELECT p.id, r.month, r.pay_date, p.net, p.gross FROM payslips p JOIN payroll_runs r ON r.id = p.run_id
      WHERE p.user_id = ? AND r.status = 'confirmed' ORDER BY r.month DESC`, me.id);
 
   const runs =
     me.role === "admin"
-      ? all<{ id: number; month: string; pay_date: string; status: string; n: number; gross: number; net: number }>(
+      ? await all<{ id: number; month: string; pay_date: string; status: string; n: number; gross: number; net: number }>(
           `SELECT r.*, COUNT(p.id) AS n, COALESCE(SUM(p.gross), 0) AS gross, COALESCE(SUM(p.net), 0) AS net
            FROM payroll_runs r LEFT JOIN payslips p ON p.run_id = r.id GROUP BY r.id ORDER BY r.month DESC`)
       : [];
