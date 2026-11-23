@@ -10,12 +10,12 @@ export function Sidebar({
   isAdmin,
   isApprover,
   todoCount,
-  userSwitcher,
+  account,
 }: {
   isAdmin: boolean;
   isApprover: boolean;
   todoCount: number;
-  userSwitcher: React.ReactNode;
+  account: React.ReactNode;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -29,6 +29,10 @@ export function Sidebar({
     { href: "/time-off", label: "휴가", icon: "🌴" },
     { href: "/time-off/manage", label: "휴가 관리", icon: "✅", admin: !isApprover },
     { href: "/workflow", label: "워크플로우", icon: "📝" },
+    { href: "/contracts", label: "전자계약", icon: "✍️" },
+    { href: "/payroll", label: "급여", icon: "💰" },
+    { href: "/certificates", label: "증명서", icon: "📄" },
+    { href: "/settings", label: "설정", icon: "⚙️", admin: true },
   ];
 
   const isActive = (href: string) =>
@@ -58,7 +62,7 @@ export function Sidebar({
             {!!i.badge && <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white">{i.badge}</span>}
           </Link>
         ))}
-      <div className="mt-auto border-t border-gray-200 pt-3">{userSwitcher}</div>
+      <div className="mt-auto border-t border-gray-200 pt-3">{account}</div>
     </nav>
   );
 

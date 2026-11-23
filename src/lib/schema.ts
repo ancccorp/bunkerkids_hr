@@ -1,4 +1,7 @@
-// SQLite schema. Dates are stored as 'YYYY-MM-DD', times as 'HH:MM', durations in minutes.
+// SQLite schema. Dates are stored as 'YYYY-MM-DD', times as 'HH:MM', durations in minutes, money in KRW.
+// Bump SCHEMA_VERSION whenever a table changes shape; older databases must be reset or migrated.
+export const SCHEMA_VERSION = 2;
+
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS departments (
   id          INTEGER PRIMARY KEY,
@@ -20,7 +23,21 @@ CREATE TABLE IF NOT EXISTS users (
   status        TEXT NOT NULL DEFAULT '재직', -- 재직 | 수습 | 휴직 | 퇴사예정 | 퇴사
   department_id INTEGER REFERENCES departments(id),
   role          TEXT NOT NULL DEFAULT 'member', -- admin | member
-  color         TEXT NOT NULL DEFAULT '#f97066'
+  color         TEXT NOT NULL DEFAULT '#f97066',
+  birth_date    TEXT,
+  annual_salary INTEGER,                    -- 연봉 (식대 포함, 원)
+  meal_allowance INTEGER NOT NULL DEFAULT 200000, -- 월 비과세 식대
+  dependents    INTEGER NOT NULL DEFAULT 1  -- 공제대상 가족 수 (본인 포함)
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS holidays (
+  date TEXT PRIMARY KEY,
+  name TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS notices (
@@ -59,12 +76,15 @@ CREATE TABLE IF NOT EXISTS leave_types (
   description TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS leave_grants (
-  user_id       INTEGER NOT NULL REFERENCES users(id),
-  leave_type_id INTEGER NOT NULL REFERENCES leave_types(id),
-  year          INTEGER NOT NULL,
-  minutes       INTEGER NOT NULL,
-  PRIMARY KEY (user_id, leave_type_id, year)
+-- 연차는 정책으로 자동 산정하고, 관리자가 수동으로 더하거나 뺀 내역만 저장한다.
+CREATE TABLE IF NOT EXISTS leave_adjustments (
+  id           INTEGER PRIMARY KEY,
+  user_id      INTEGER NOT NULL REFERENCES users(id),
+  period_start TEXT NOT NULL,          -- 적용되는 연차 산정 기간의 시작일
+  minutes      INTEGER NOT NULL,       -- +부여 / -차감
+  reason       TEXT NOT NULL,
+  created_by   INTEGER REFERENCES users(id),
+  created_at   TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS leave_requests (
@@ -121,5 +141,54 @@ CREATE TABLE IF NOT EXISTS kudos (
   emoji      TEXT NOT NULL,
   message    TEXT NOT NULL,
   created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS certificates (
+  id        INTEGER PRIMARY KEY,
+  user_id   INTEGER NOT NULL REFERENCES users(id),
+  type      TEXT NOT NULL,          -- employment(재직) | career(경력)
+  purpose   TEXT NOT NULL,
+  issue_no  TEXT NOT NULL UNIQUE,
+  snapshot  TEXT NOT NULL,          -- 발급 시점의 인적사항 JSON
+  issued_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS contracts (
+  id            INTEGER PRIMARY KEY,
+  user_id       INTEGER NOT NULL REFERENCES users(id),
+  template      TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  body          TEXT NOT NULL,
+  annual_salary INTEGER,
+  status        TEXT NOT NULL DEFAULT 'sent', -- sent | signed | void
+  created_by    INTEGER NOT NULL REFERENCES users(id),
+  created_at    TEXT NOT NULL,
+  signed_at     TEXT,
+  signer_name   TEXT,
+  signer_ip     TEXT,                 -- SHA-256 해시로만 저장
+  body_hash     TEXT NOT NULL         -- 서명 대상 본문의 SHA-256
+);
+
+CREATE TABLE IF NOT EXISTS payroll_runs (
+  id           INTEGER PRIMARY KEY,
+  month        TEXT NOT NULL UNIQUE,  -- 'YYYY-MM'
+  pay_date     TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'draft', -- draft | confirmed
+  created_at   TEXT NOT NULL,
+  confirmed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS payslips (
+  id              INTEGER PRIMARY KEY,
+  run_id          INTEGER NOT NULL REFERENCES payroll_runs(id) ON DELETE CASCADE,
+  user_id         INTEGER NOT NULL REFERENCES users(id),
+  extra_pay       INTEGER NOT NULL DEFAULT 0,  -- 기타 과세 수당
+  extra_deduction INTEGER NOT NULL DEFAULT 0,  -- 기타 공제
+  memo            TEXT,
+  detail          TEXT NOT NULL,               -- 계산 결과 JSON
+  gross           INTEGER NOT NULL,
+  deductions      INTEGER NOT NULL,
+  net             INTEGER NOT NULL,
+  UNIQUE (run_id, user_id)
 );
 `;

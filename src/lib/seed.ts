@@ -1,17 +1,47 @@
 // Demo data. Every person, phone number and email here is fictional.
 import type { DatabaseSync } from "node:sqlite";
-import { addDays, annualLeaveDays, DAY_MINUTES, isWeekend, startOfWeek, today } from "./dates";
+import { addDays, DAY_MINUTES, isWeekend, startOfWeek, today } from "./dates";
+import { DEFAULT_HOLIDAYS } from "./holidays";
+import { CONTRACT_TEMPLATES, fillTemplate } from "./contracts";
+import { DEFAULT_SETTINGS as S } from "./settings-defaults";
+import crypto from "node:crypto";
 
 const COLORS = ["#f97066", "#9e77ed", "#36bffa", "#fdb022", "#32d583", "#ee46bc", "#6172f3", "#fd853a"];
 
-export function seed(db: DatabaseSync) {
+const SALARY: Record<string, number> = { CEO: 120_000_000, COO: 96_000_000, CPO: 96_000_000, Engineer: 60_000_000, PM: 55_000_000 };
+
+/** 기본 데이터(휴가 유형, 공휴일)는 항상, 데모 구성원·문서는 opts.demo 일 때만 넣는다. */
+export function seed(db: DatabaseSync, opts: { demo: boolean } = { demo: true }) {
   const t = today();
-  const year = Number(t.slice(0, 4));
   const ins = (sql: string, ...p: (string | number | null)[]) =>
     Number(db.prepare(sql).run(...p).lastInsertRowid);
 
   db.exec("BEGIN");
   try {
+    // ── 휴가 유형 ────────────────────────────────────────
+    const lt = (name: string, icon: string, desc: string, grant: number | null, annual = 0) =>
+      ins("INSERT INTO leave_types (name, icon, is_annual, grant_minutes, description) VALUES (?, ?, ?, ?, ?)", name, icon, annual, grant, desc);
+    const annual = lt("연차", "🏖️", "근로기준법 제60조 (유급)", null, 1);
+    lt("배우자 출산", "👶", "출산일부터 120일 내 20일 (유급, 분할 3회)", 20 * DAY_MINUTES);
+    lt("배우자 유산·사산", "🕊️", "신청 시 3일 (첫날 유급)", 3 * DAY_MINUTES);
+    lt("출산전후휴가", "🤱", "90일, 다태아 120일 (최초 60일 유급)", 90 * DAY_MINUTES);
+    lt("가족돌봄휴가", "🏠", "연 10일 (무급)", 10 * DAY_MINUTES);
+    lt("보건휴가", "🌸", "월 1일 (무급, 여성 근로자 청구 시)", DAY_MINUTES);
+    lt("결혼 - 본인", "💍", "경조휴가 5일 (유급, 회사 규정)", 5 * DAY_MINUTES);
+    lt("조의 - 부모/배우자/자녀", "🤍", "경조휴가 5일 (유급, 회사 규정)", 5 * DAY_MINUTES);
+    lt("조의 - 조부모/형제/자매", "🤍", "경조휴가 3일 (유급, 회사 규정)", 3 * DAY_MINUTES);
+    lt("병가", "🩺", "연차 소진 후 연 60일 (무급, 진단서 필요)", 60 * DAY_MINUTES);
+    lt("예비군·민방위 훈련", "🎖️", "훈련 기간 공가 (유급)", null);
+    lt("건강검진", "🏥", "연 1회 4시간 공가 (유급)", 4 * 60);
+
+    for (const [date, name] of DEFAULT_HOLIDAYS) ins("INSERT INTO holidays (date, name) VALUES (?, ?)", date, name);
+
+    if (!opts.demo) {
+      ins("INSERT INTO departments (name, parent_id) VALUES (?, NULL)", "벙커키즈");
+      db.exec("COMMIT");
+      return;
+    }
+
     // ── 조직 ──────────────────────────────────────────────
     const dept = (name: string, parent: number | null) =>
       ins("INSERT INTO departments (name, parent_id) VALUES (?, ?)", name, parent);
@@ -47,8 +77,8 @@ export function seed(db: DatabaseSync) {
     const ids: Record<string, number> = {};
     people.forEach(([name, title, d, join, status = "재직", role = "member"], i) => {
       ids[name] = ins(
-        `INSERT INTO users (name, title, email, phone, employee_no, join_date, leave_date, status, department_id, role, color)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO users (name, title, email, phone, employee_no, join_date, leave_date, status, department_id, role, color, annual_salary, birth_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         name,
         title,
         `${name.toLowerCase()}@bunkerkids.example`,
@@ -60,6 +90,8 @@ export function seed(db: DatabaseSync) {
         d,
         role,
         COLORS[i % COLORS.length],
+        SALARY[title] ?? 42_000_000,
+        `${1985 + (i % 12)}-0${1 + (i % 9)}-15`,
       );
     });
 
@@ -69,26 +101,6 @@ export function seed(db: DatabaseSync) {
     for (const d of [business, operation, marketing]) setApprover(d, ids.Ed);
     for (const d of [product, tech, pm]) setApprover(d, ids.Sora);
     setApprover(mgmt, ids.Jay);
-
-    // ── 휴가 유형 ────────────────────────────────────────
-    const lt = (name: string, icon: string, desc: string, grant: number | null, annual = 0) =>
-      ins("INSERT INTO leave_types (name, icon, is_annual, grant_minutes, description) VALUES (?, ?, ?, ?, ?)", name, icon, annual, grant, desc);
-    const annual = lt("연차", "🏖️", "근로기준법 기준 연차", null, 1);
-    lt("배우자 출산", "👶", "신청 시 10일 부여", 10 * DAY_MINUTES);
-    lt("배우자 유산·사산", "🕊️", "신청 시 5일 부여", 5 * DAY_MINUTES);
-    lt("결혼 - 본인", "💍", "신청 시 5일 부여", 5 * DAY_MINUTES);
-    lt("조의 - 부모/배우자/자녀", "🤍", "신청 시 5일 부여", 5 * DAY_MINUTES);
-    lt("조의 - 조부모/형제/자매", "🤍", "신청 시 3일 부여", 3 * DAY_MINUTES);
-    lt("병가", "🩺", "연차 소진 시 60일", 60 * DAY_MINUTES);
-    lt("군소집훈련", "🎖️", "신청 시 부여", null);
-    lt("백신휴가", "💉", "신청 시 1일 부여", DAY_MINUTES);
-    lt("건강검진 휴가", "🏥", "신청 시 4시간 부여", 4 * 60);
-
-    for (const [name, , , join] of people) {
-      if (join > t) continue;
-      ins("INSERT INTO leave_grants (user_id, leave_type_id, year, minutes) VALUES (?, ?, ?, ?)",
-        ids[name], annual, year, annualLeaveDays(join, year) * DAY_MINUTES);
-    }
 
     // ── 휴가 신청 ────────────────────────────────────────
     const week = startOfWeek(t);
@@ -108,9 +120,6 @@ export function seed(db: DatabaseSync) {
     leave("Bob", addDays(t, -20), addDays(t, -20), "hours", 120, "pending", "Jay", "10:00", "12:00");
     leave("Amy", addDays(week, 9), addDays(week, 10), "day", 2 * DAY_MINUTES, "pending", "Ed", null, null, "가족 여행");
     leave("Brian", addDays(week, 8), addDays(week, 8), "am", 4 * 60, "pending", "Sora", "10:00", "14:00");
-
-    // 연차를 다 쓴 신규 입사자 예시 (잔여 마이너스)
-    db.prepare("UPDATE leave_grants SET minutes = 0 WHERE user_id = ?").run(ids.Bob);
 
     // ── 근무 기록 (기본 근무와 다른 날만 저장) ───────────
     for (let i = 0; i < 5; i++) {
@@ -175,6 +184,18 @@ export function seed(db: DatabaseSync) {
     // ── 인정 ──────────────────────────────────────────────
     ins("INSERT INTO kudos (from_id, to_id, emoji, message, created_at) VALUES (?, ?, ?, ?, ?)",
       ids.Sora, ids.Betty, "🚀", "배포 자동화 덕분에 릴리즈가 훨씬 편해졌어요!", `${addDays(t, -3)} 15:00`);
+
+    // ── 전자계약 (서명 대기) ─────────────────────────────
+    const annieJoin = people.find((p) => p[0] === "Annie")![3];
+    const body = fillTemplate(CONTRACT_TEMPLATES["근로계약서"].body, {
+      company: S.company_name, ceo: S.company_ceo, address: S.company_address, name: "Annie", title: "Operation Manager",
+      department: "벙커키즈 › Business › Operation", start_date: annieJoin, annual_salary: "42,000,000", monthly_salary: "3,500,000",
+      meal_allowance: "200,000", work_start: S.work_start, work_end: S.work_end, pay_day: S.pay_day, today: t,
+    });
+    ins(`INSERT INTO contracts (user_id, template, title, body, annual_salary, status, created_by, created_at, body_hash)
+         VALUES (?, '근로계약서', ?, ?, 42000000, 'sent', ?, ?, ?)`,
+      ids.Annie, "근로계약서 (기간의 정함이 없는 경우) - Annie", body, ids.Bob, `${addDays(t, -2)} 10:00`,
+      crypto.createHash("sha256").update(body).digest("hex"));
 
     db.exec("COMMIT");
   } catch (e) {

@@ -1,6 +1,8 @@
 import "server-only";
 import { all, get } from "./db";
-import { addDays, DAY_MINUTES, eachDay, isWeekend, toMinutes, workedMinutes, WORK_END, WORK_START } from "./dates";
+import { addDays, DAY_MINUTES, eachDay, isWeekend, today, toMinutes, workedMinutes } from "./dates";
+import { annualEntitlement, type Entitlement, type LeaveBasis } from "./leave-policy";
+import { getSettings } from "./settings";
 
 export type User = {
   id: number;
@@ -16,6 +18,10 @@ export type User = {
   department_id: number | null;
   role: "admin" | "member";
   color: string;
+  birth_date: string | null;
+  annual_salary: number | null;
+  meal_allowance: number;
+  dependents: number;
   department_name?: string | null;
 };
 
@@ -175,42 +181,92 @@ export function getLeaveRequest(id: number) {
   return get<LeaveRequest>(`${LEAVE_SELECT} WHERE r.id = ?`, id);
 }
 
-/** 휴가 유형별 잔여: 부여량 - (승인 + 승인대기) 사용량 */
-export function leaveBalances(userId: number, year: number) {
+// ── 공휴일 ────────────────────────────────────────────
+
+export function holidayMap(from: string, to: string) {
+  return new Map(all<{ date: string; name: string }>("SELECT date, name FROM holidays WHERE date BETWEEN ? AND ?", from, to).map((h) => [h.date, h.name]));
+}
+
+export function listHolidays(year: number) {
+  return all<{ date: string; name: string }>("SELECT date, name FROM holidays WHERE substr(date, 1, 4) = ? ORDER BY date", String(year));
+}
+
+/** 소정근로일: 주말·공휴일이 아닌 날 */
+export function workdays(from: string, to: string) {
+  const hol = holidayMap(from, to);
+  return eachDay(from, to).filter((d) => !isWeekend(d) && !hol.has(d));
+}
+
+// ── 연차 ──────────────────────────────────────────────
+
+function annualUsed(userId: number, from: string, to: string) {
+  return get<{ m: number }>(
+    `SELECT COALESCE(SUM(r.minutes), 0) AS m FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
+     WHERE r.user_id = ? AND t.is_annual = 1 AND r.status IN ('approved','pending') AND r.start_date >= ? AND r.start_date < ?`,
+    userId, from, to)!.m;
+}
+
+export type AnnualBalance = Entitlement & { adjustments: number; granted: number; used: number; remaining: number; basis: LeaveBasis };
+
+/** 오늘(asOf) 기준 연차 산정 기간의 부여·사용·잔여 */
+export function annualBalance(user: Pick<User, "id" | "join_date">, asOf = today()): AnnualBalance {
+  const basis = getSettings().leave_basis as LeaveBasis;
+  const ent = annualEntitlement(user.join_date, asOf, basis, (from, to) => annualUsed(user.id, from, to));
+  const adjustments = get<{ m: number }>(
+    "SELECT COALESCE(SUM(minutes), 0) AS m FROM leave_adjustments WHERE user_id = ? AND period_start = ?", user.id, ent.periodStart)!.m;
+  const used = annualUsed(user.id, ent.periodStart, ent.periodEnd);
+  const granted = ent.minutes + adjustments;
+  return { ...ent, adjustments, granted, used, remaining: granted - used, basis };
+}
+
+export function listAdjustments(userId: number) {
+  return all<{ id: number; period_start: string; minutes: number; reason: string; created_at: string; by_name: string | null }>(
+    `SELECT a.*, u.name AS by_name FROM leave_adjustments a LEFT JOIN users u ON u.id = a.created_by WHERE a.user_id = ? ORDER BY a.id DESC`, userId);
+}
+
+/** 휴가 유형별 현황. 연차는 정책 산정 기간, 나머지는 올해 사용량 기준. */
+export function leaveBalances(user: Pick<User, "id" | "join_date">, asOf = today()) {
   const types = listLeaveTypes();
+  const year = asOf.slice(0, 4);
   const used = all<{ leave_type_id: number; minutes: number }>(
     `SELECT leave_type_id, SUM(minutes) AS minutes FROM leave_requests
      WHERE user_id = ? AND status IN ('approved','pending') AND substr(start_date,1,4) = ? GROUP BY leave_type_id`,
-    userId, String(year));
-  const grants = all<{ leave_type_id: number; minutes: number }>(
-    "SELECT leave_type_id, minutes FROM leave_grants WHERE user_id = ? AND year = ?", userId, year);
+    user.id, year);
   const usedBy = new Map(used.map((u) => [u.leave_type_id, u.minutes]));
-  const grantBy = new Map(grants.map((g) => [g.leave_type_id, g.minutes]));
-  return types.map((t) => {
-    const u = usedBy.get(t.id) ?? 0;
-    const granted = t.is_annual ? grantBy.get(t.id) ?? 0 : t.grant_minutes;
-    return { type: t, used: u, granted, remaining: granted == null ? null : granted - u };
-  });
+  const annual = annualBalance(user, asOf);
+  return types.map((t) =>
+    t.is_annual
+      ? { type: t, used: annual.used, granted: annual.granted as number | null, remaining: annual.remaining as number | null, annual }
+      : {
+          type: t,
+          used: usedBy.get(t.id) ?? 0,
+          granted: t.grant_minutes,
+          remaining: t.grant_minutes == null ? null : t.grant_minutes - (usedBy.get(t.id) ?? 0),
+          annual: undefined,
+        },
+  );
 }
 
-/** 신청 단위 → 사용 시간(분) */
+/** 신청 단위 → 사용 시간(분). 종일 휴가는 주말·공휴일을 빼고 센다. */
 export function leaveMinutes(unit: string, start: string, end: string, startTime?: string | null, endTime?: string | null) {
   if (unit === "am" || unit === "pm") return 4 * 60;
   if (unit === "hours" && startTime && endTime) return Math.max(0, workedMinutes(startTime, endTime));
-  return eachDay(start, end).filter((d) => !isWeekend(d)).length * DAY_MINUTES;
+  return workdays(start, end).length * DAY_MINUTES;
 }
 
 // ── 근무 ──────────────────────────────────────────────
 
 export type DayCell = {
-  blocks: { kind: "work" | "leave"; label: string; start?: string; end?: string; pending?: boolean }[];
+  blocks: { kind: "work" | "leave" | "holiday"; label: string; start?: string; end?: string; pending?: boolean }[];
   minutes: number;
 };
 
-/** 구성원별 주간 근무표. 기본 근무(10–19시) 위에 근무 기록과 휴가를 겹쳐 계산한다. */
-export function weeklySchedule(users: User[], weekStart: string) {
-  const days = eachDay(weekStart, addDays(weekStart, 6));
-  const weekEnd = days[6];
+/** 구성원별 근무표. 기본 근무시간(설정) 위에 근무 기록·휴가·공휴일을 겹쳐 계산한다. */
+export function weeklySchedule(users: User[], weekStart: string, numDays = 7) {
+  const days = eachDay(weekStart, addDays(weekStart, numDays - 1));
+  const weekEnd = days[days.length - 1];
+  const settings = getSettings();
+  const holidays = holidayMap(weekStart, weekEnd);
   const leaves = listLeaveRequests({ from: weekStart, to: weekEnd }).filter((l) => l.status === "approved" || l.status === "pending");
   const records = all<{ user_id: number; date: string; start_time: string; end_time: string }>(
     "SELECT * FROM work_records WHERE date BETWEEN ? AND ?", weekStart, weekEnd);
@@ -221,10 +277,14 @@ export function weeklySchedule(users: User[], weekStart: string) {
       const cell: DayCell = { blocks: [], minutes: 0 };
       const inactive = u.join_date > d || (u.leave_date && u.leave_date < d) || u.status === "휴직" || u.status === "퇴사";
       if (isWeekend(d) || inactive) return cell;
+      if (holidays.has(d)) {
+        cell.blocks.push({ kind: "holiday", label: holidays.get(d)! });
+        return cell;
+      }
 
       const rec = records.find((r) => r.user_id === u.id && r.date === d);
-      const ws = rec?.start_time ?? WORK_START;
-      const we = rec?.end_time ?? WORK_END;
+      const ws = rec?.start_time ?? settings.work_start;
+      const we = rec?.end_time ?? settings.work_end;
       const dayLeaves = leaves.filter((l) => l.user_id === u.id && l.start_date <= d && l.end_date >= d);
 
       const full = dayLeaves.find((l) => l.unit === "day");
@@ -264,7 +324,7 @@ export function weeklySchedule(users: User[], weekStart: string) {
       total += cell.minutes;
       return cell;
     });
-    return { user: u, cells, total };
+    return { user: u, days, cells, total };
   });
 }
 

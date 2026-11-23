@@ -1,12 +1,15 @@
 "use server";
 
-import { cookies } from "next/headers";
+import crypto from "node:crypto";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { all, get, run, tx } from "@/lib/db";
-import { currentUser, requireAdmin, USER_COOKIE } from "@/lib/auth";
-import { annualLeaveDays, DAY_MINUTES, nowStamp, today } from "@/lib/dates";
-import { documentSteps, findApprover, getDocument, getLeaveRequest, leaveMinutes } from "@/lib/queries";
+import { get, run, tx } from "@/lib/db";
+import { authMode, clearSession, currentUser, requireAdmin, setSession } from "@/lib/auth";
+import { nowStamp, today } from "@/lib/dates";
+import { annualBalance, documentSteps, findApprover, getDocument, getLeaveRequest, getUser, leaveMinutes } from "@/lib/queries";
+import { DEFAULT_SETTINGS, setSetting, type SettingKey } from "@/lib/settings";
+import { buildPayslip, certificateSnapshot } from "@/lib/hr";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const num = (f: FormData, k: string) => Number(f.get(k));
@@ -17,10 +20,17 @@ function refreshAll() {
 
 // ── 세션 ──────────────────────────────────────────────
 
-export async function switchUser(formData: FormData) {
-  const jar = await cookies();
-  jar.set(USER_COOKIE, str(formData, "userId"), { path: "/", httpOnly: true, sameSite: "lax" });
-  refreshAll();
+export async function devLogin(formData: FormData) {
+  if (authMode() !== "dev") throw new Error("개발 모드에서만 사용할 수 있습니다.");
+  const user = getUser(num(formData, "userId"));
+  if (!user || user.status === "퇴사") throw new Error("구성원을 찾을 수 없습니다.");
+  await setSession(user.id);
+  redirect("/");
+}
+
+export async function logout() {
+  await clearSession();
+  redirect("/login");
 }
 
 // ── 공지 ──────────────────────────────────────────────
@@ -111,21 +121,16 @@ async function decideLeave(formData: FormData, approve: boolean) {
   refreshAll();
 }
 
-export async function grantAnnualLeave(formData: FormData) {
-  await requireAdmin();
-  const year = num(formData, "year");
-  const users = all<{ id: number; join_date: string }>(
-    "SELECT id, join_date FROM users WHERE status != '퇴사' AND join_date <= ?", today());
-  const annual = get<{ id: number }>("SELECT id FROM leave_types WHERE is_annual = 1");
-  if (!annual) return;
-  tx(() => {
-    for (const u of users) {
-      run(
-        `INSERT INTO leave_grants (user_id, leave_type_id, year, minutes) VALUES (?, ?, ?, ?)
-         ON CONFLICT (user_id, leave_type_id, year) DO UPDATE SET minutes = excluded.minutes`,
-        u.id, annual.id, year, annualLeaveDays(u.join_date, year) * DAY_MINUTES);
-    }
-  });
+/** 관리자 연차 수동 조정 (+부여 / -차감). 현재 산정 기간에 적용된다. */
+export async function adjustLeave(formData: FormData) {
+  const me = await requireAdmin();
+  const user = getUser(num(formData, "user_id"));
+  const hours = Number(formData.get("hours"));
+  const reason = str(formData, "reason");
+  if (!user || !hours || !reason) throw new Error("구성원, 시간, 사유를 입력해주세요.");
+  const { periodStart } = annualBalance(user);
+  run("INSERT INTO leave_adjustments (user_id, period_start, minutes, reason, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+    user.id, periodStart, Math.round(hours * 60), reason, me.id, nowStamp());
   refreshAll();
 }
 
@@ -162,6 +167,10 @@ export async function saveMember(formData: FormData) {
     status: str(formData, "status") || "재직",
     department_id: num(formData, "department_id") || null,
     role: str(formData, "role") === "admin" ? "admin" : "member",
+    birth_date: str(formData, "birth_date") || null,
+    annual_salary: num(formData, "annual_salary") || null,
+    meal_allowance: formData.has("meal_allowance") ? num(formData, "meal_allowance") : 200000,
+    dependents: Math.max(1, num(formData, "dependents") || 1),
   };
   if (!fields.name || !fields.email || !fields.join_date) throw new Error("이름, 이메일, 입사일은 필수입니다.");
   const cols = Object.keys(fields);
@@ -251,4 +260,155 @@ export async function sendKudos(formData: FormData) {
   run("INSERT INTO kudos (from_id, to_id, emoji, message, created_at) VALUES (?, ?, ?, ?, ?)",
     me.id, to, str(formData, "emoji") || "👏", message, nowStamp());
   refreshAll();
+}
+
+// ── 설정 ──────────────────────────────────────────────
+
+export async function saveSettings(formData: FormData) {
+  await requireAdmin();
+  for (const key of Object.keys(DEFAULT_SETTINGS) as SettingKey[]) {
+    if (formData.has(key)) setSetting(key, str(formData, key));
+  }
+  refreshAll();
+}
+
+export async function saveDepartment(formData: FormData) {
+  await requireAdmin();
+  const id = num(formData, "id");
+  const name = str(formData, "name");
+  const parent = num(formData, "parent_id") || null;
+  const approver = num(formData, "approver_id") || null;
+  if (!name) throw new Error("조직 이름을 입력해주세요.");
+  if (id && parent === id) throw new Error("자기 자신을 상위 조직으로 지정할 수 없습니다.");
+  if (id) run("UPDATE departments SET name = ?, parent_id = ?, approver_id = ? WHERE id = ?", name, parent, approver, id);
+  else run("INSERT INTO departments (name, parent_id, approver_id) VALUES (?, ?, ?)", name, parent, approver);
+  refreshAll();
+}
+
+export async function addHoliday(formData: FormData) {
+  await requireAdmin();
+  const date = str(formData, "date");
+  const name = str(formData, "name");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !name) throw new Error("날짜와 이름을 입력해주세요.");
+  run("INSERT INTO holidays (date, name) VALUES (?, ?) ON CONFLICT (date) DO UPDATE SET name = excluded.name", date, name);
+  refreshAll();
+}
+
+export async function deleteHoliday(formData: FormData) {
+  await requireAdmin();
+  run("DELETE FROM holidays WHERE date = ?", str(formData, "date"));
+  refreshAll();
+}
+
+// ── 증명서 ─────────────────────────────────────────────
+
+export async function issueCertificate(formData: FormData) {
+  const me = await currentUser();
+  const type = str(formData, "type") === "career" ? "career" : "employment";
+  const purpose = str(formData, "purpose");
+  if (!purpose) throw new Error("제출 용도를 입력해주세요.");
+  const userId = me.role === "admin" && num(formData, "user_id") ? num(formData, "user_id") : me.id;
+  const user = getUser(userId);
+  if (!user) throw new Error("구성원을 찾을 수 없습니다.");
+  if (type === "employment" && (user.status === "퇴사" || user.join_date > today())) throw new Error("재직증명서는 재직 중인 구성원만 발급할 수 있습니다.");
+  const year = today().slice(0, 4);
+  const seq = get<{ n: number }>("SELECT COUNT(*) AS n FROM certificates WHERE substr(issued_at, 1, 4) = ?", year)!.n + 1;
+  const issueNo = `BK-${year}-${String(seq).padStart(4, "0")}`;
+  const id = run("INSERT INTO certificates (user_id, type, purpose, issue_no, snapshot, issued_at) VALUES (?, ?, ?, ?, ?, ?)",
+    user.id, type, purpose, issueNo, JSON.stringify(certificateSnapshot(user)), nowStamp());
+  refreshAll();
+  redirect(`/certificates/${id}`);
+}
+
+// ── 전자계약 ───────────────────────────────────────────
+
+const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
+
+export async function createContract(formData: FormData) {
+  const me = await requireAdmin();
+  const user = getUser(num(formData, "user_id"));
+  const body = str(formData, "body");
+  if (!user || !body) throw new Error("구성원과 계약 내용을 입력해주세요.");
+  const id = run(
+    `INSERT INTO contracts (user_id, template, title, body, annual_salary, status, created_by, created_at, body_hash)
+     VALUES (?, ?, ?, ?, ?, 'sent', ?, ?, ?)`,
+    user.id, str(formData, "template"), str(formData, "title"), body, num(formData, "annual_salary") || null, me.id, nowStamp(), sha256(body));
+  refreshAll();
+  redirect(`/contracts/${id}`);
+}
+
+export async function signContract(formData: FormData) {
+  const me = await currentUser();
+  const c = get<{ id: number; user_id: number; status: string; body: string; body_hash: string; annual_salary: number | null }>(
+    "SELECT * FROM contracts WHERE id = ?", num(formData, "id"));
+  if (!c || c.user_id !== me.id || c.status !== "sent") throw new Error("서명할 수 없는 계약입니다.");
+  if (str(formData, "signer_name") !== me.name) throw new Error("본인 이름을 정확히 입력해주세요.");
+  if (formData.get("agree") !== "on") throw new Error("계약 내용에 동의해야 서명할 수 있습니다.");
+  if (sha256(c.body) !== c.body_hash) throw new Error("계약 본문이 발송 이후 변경되었습니다. 관리자에게 문의하세요.");
+  const h = await headers();
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip") ?? "unknown";
+  tx(() => {
+    run("UPDATE contracts SET status = 'signed', signed_at = ?, signer_name = ?, signer_ip = ? WHERE id = ?",
+      nowStamp(), me.name, sha256(ip), c.id);
+    if (c.annual_salary) run("UPDATE users SET annual_salary = ? WHERE id = ?", c.annual_salary, me.id);
+  });
+  refreshAll();
+}
+
+export async function voidContract(formData: FormData) {
+  await requireAdmin();
+  run("UPDATE contracts SET status = 'void' WHERE id = ? AND status = 'sent'", num(formData, "id"));
+  refreshAll();
+}
+
+// ── 급여 ──────────────────────────────────────────────
+
+export async function createPayrollRun(formData: FormData) {
+  await requireAdmin();
+  const month = str(formData, "month");
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("정산 월을 선택해주세요.");
+  if (get("SELECT 1 FROM payroll_runs WHERE month = ?", month)) throw new Error("이미 생성된 정산 월입니다.");
+  const payDay = Number(get<{ value: string }>("SELECT value FROM settings WHERE key = 'pay_day'")?.value ?? DEFAULT_SETTINGS.pay_day);
+  const lastDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
+  const payDate = `${month}-${String(Math.min(payDay, lastDay)).padStart(2, "0")}`;
+  const id = tx(() => {
+    const runId = run("INSERT INTO payroll_runs (month, pay_date, status, created_at) VALUES (?, ?, 'draft', ?)", month, payDate, nowStamp());
+    buildPayslip(runId, month);
+    return runId;
+  });
+  refreshAll();
+  redirect(`/payroll/${id}`);
+}
+
+export async function updatePayslip(formData: FormData) {
+  await requireAdmin();
+  const slip = get<{ id: number; run_id: number; user_id: number }>("SELECT * FROM payslips WHERE id = ?", num(formData, "id"));
+  if (!slip) return;
+  const runRow = get<{ month: string; status: string }>("SELECT month, status FROM payroll_runs WHERE id = ?", slip.run_id)!;
+  if (runRow.status !== "draft") throw new Error("확정된 급여는 수정할 수 없습니다.");
+  run("UPDATE payslips SET extra_pay = ?, extra_deduction = ?, memo = ? WHERE id = ?",
+    Math.max(0, num(formData, "extra_pay") || 0), Math.max(0, num(formData, "extra_deduction") || 0), str(formData, "memo") || null, slip.id);
+  buildPayslip(slip.run_id, runRow.month, slip.user_id);
+  refreshAll();
+}
+
+export async function recalcPayroll(formData: FormData) {
+  await requireAdmin();
+  const r = get<{ id: number; month: string; status: string }>("SELECT * FROM payroll_runs WHERE id = ?", num(formData, "id"));
+  if (!r || r.status !== "draft") return;
+  tx(() => buildPayslip(r.id, r.month));
+  refreshAll();
+}
+
+export async function confirmPayroll(formData: FormData) {
+  await requireAdmin();
+  run("UPDATE payroll_runs SET status = 'confirmed', confirmed_at = ? WHERE id = ? AND status = 'draft'", nowStamp(), num(formData, "id"));
+  refreshAll();
+}
+
+export async function deletePayrollRun(formData: FormData) {
+  await requireAdmin();
+  run("DELETE FROM payroll_runs WHERE id = ? AND status = 'draft'", num(formData, "id"));
+  refreshAll();
+  redirect("/payroll");
 }

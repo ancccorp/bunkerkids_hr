@@ -24,6 +24,8 @@ const STATUS_STYLE: Record<string, string> = {
   rejected: "bg-red-50 text-red-600",
   cancelled: "bg-gray-100 text-gray-500",
   waiting: "bg-gray-100 text-gray-500",
+  draft: "bg-amber-50 text-amber-700",
+  confirmed: "bg-brand-50 text-brand-700",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -32,12 +34,14 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: "반려",
   cancelled: "취소",
   waiting: "대기",
+  draft: "작성중",
+  confirmed: "확정",
 };
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, label }: { status: string; label?: string }) {
   return (
     <span className={`inline-flex whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[status] ?? "bg-gray-100 text-gray-600"}`}>
-      {STATUS_LABEL[status] ?? status}
+      {label ?? STATUS_LABEL[status] ?? status}
     </span>
   );
 }
