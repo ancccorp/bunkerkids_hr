@@ -45,7 +45,7 @@ export default async function Home() {
   const week = startOfWeek(t);
   const isAdmin = me.role === "admin";
 
-  const todos = await todosFor(me.id);
+  const todos = await todosFor(me.id, me.role === "admin");
   const signCount = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM contracts WHERE user_id = ? AND status = 'sent'", me.id))!.n;
   const annual = await annualBalance(me);
   const myWeek = (await weeklySchedule([me], week))[0];

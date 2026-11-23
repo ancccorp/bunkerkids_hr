@@ -66,7 +66,7 @@ export async function buildPayslip(runId: number, month: string, onlyUserId?: nu
   const monthDays = daysBetween(first, next);
   const rates = await payrollRates();
   const users = await all<User>(
-    `SELECT * FROM users WHERE annual_salary > 0 AND status != '휴직' AND join_date < ?
+    `SELECT id, name, join_date, leave_date, status, annual_salary, meal_allowance, dependents FROM users WHERE annual_salary > 0 AND status != '휴직' AND join_date < ?
        AND (leave_date IS NULL OR leave_date >= ?) ${onlyUserId ? "AND id = ?" : ""}`,
     ...(onlyUserId ? [next, first, onlyUserId] : [next, first]));
 

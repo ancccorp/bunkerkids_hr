@@ -9,7 +9,7 @@ import { Avatar } from "@/components/ui";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const me = await currentUser();
-  const todoCount = (await todosFor(me.id)).length;
+  const todoCount = (await todosFor(me.id, me.role === "admin")).length;
   const signCount = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM contracts WHERE user_id = ? AND status = 'sent'", me.id))!.n;
 
   const account = (

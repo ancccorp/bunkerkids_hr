@@ -5,7 +5,8 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { get, run, tx } from "@/lib/db";
-import { authMode, clearSession, currentUser, requireAdmin, setSession } from "@/lib/auth";
+import { allowedDomain, authMode, clearSession, currentUser, requireAdmin, setSession } from "@/lib/auth";
+import { hashPassword, passwordProblem, verifyPassword } from "@/lib/password";
 import { nowStamp, today } from "@/lib/dates";
 import { annualBalance, documentSteps, findApprover, getDocument, getLeaveRequest, getUser, leaveMinutes } from "@/lib/queries";
 import { DEFAULT_SETTINGS, setSetting, type SettingKey } from "@/lib/settings";
@@ -31,6 +32,139 @@ export async function devLogin(formData: FormData) {
 export async function logout() {
   await clearSession();
   redirect("/login");
+}
+
+// ── 이메일·비밀번호 로그인 (가입 → 관리자 승인) ─────────────
+
+const MAX_FAILURES = 5;
+const LOCK_MINUTES = 15;
+// 존재하지 않는 계정에도 같은 시간이 걸리도록 비교에 쓰는 더미 해시
+let dummyHash: Promise<string> | undefined;
+
+function requirePasswordMode() {
+  if (authMode() !== "password") redirect("/login");
+}
+
+export async function passwordLogin(formData: FormData) {
+  requirePasswordMode();
+  const email = str(formData, "email").toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  if (!email || !password) redirect("/login?error=missing");
+
+  const attempt = await get<{ failures: number; locked_until: string | null }>("SELECT * FROM login_attempts WHERE email = ?", email);
+  if (attempt?.locked_until && attempt.locked_until > new Date().toISOString()) redirect("/login?error=locked");
+
+  const user = await get<{ id: number; password_hash: string | null; status: string }>(
+    "SELECT id, password_hash, status FROM users WHERE lower(email) = ? AND status != '퇴사'", email);
+  dummyHash ??= hashPassword(crypto.randomBytes(16).toString("hex"));
+  const ok = await verifyPassword(password, user?.password_hash ?? (await dummyHash));
+
+  if (!user || !user.password_hash || !ok) {
+    const failures = (attempt?.failures ?? 0) + 1;
+    const lockedUntil = failures >= MAX_FAILURES ? new Date(Date.now() + LOCK_MINUTES * 60_000).toISOString() : null;
+    await run(
+      `INSERT INTO login_attempts (email, failures, locked_until) VALUES (?, ?, ?)
+       ON CONFLICT (email) DO UPDATE SET failures = excluded.failures, locked_until = excluded.locked_until`,
+      email, lockedUntil ? 0 : failures, lockedUntil);
+    // 승인 대기 중인 가입이면 그렇게 알려준다
+    if (!user?.password_hash && (await get("SELECT 1 FROM signup_requests WHERE lower(email) = ? AND status = 'pending'", email))) {
+      redirect("/login?error=pending");
+    }
+    redirect(`/login?error=${lockedUntil ? "locked" : "invalid"}`);
+  }
+  await run("DELETE FROM login_attempts WHERE email = ?", email);
+  await setSession(user.id);
+  redirect("/");
+}
+
+export async function signup(formData: FormData) {
+  requirePasswordMode();
+  const name = str(formData, "name");
+  const email = str(formData, "email").toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  const back = (code: string) => redirect(`/signup?error=${code}`);
+  if (!name || !email) back("missing");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) back("email");
+  const domain = allowedDomain();
+  if (domain && !email.endsWith(`@${domain}`)) back("domain");
+  if (password !== String(formData.get("password2") ?? "")) back("mismatch");
+  if (passwordProblem(password)) back("weak");
+
+  const existing = await get<{ id: number; password_hash: string | null }>(
+    "SELECT id, password_hash FROM users WHERE lower(email) = ? AND status != '퇴사'", email);
+  if (existing?.password_hash) back("exists");
+  const hash = await hashPassword(password);
+
+  // 최초 관리자: 관리자가 한 명도 없고 BOOTSTRAP_ADMIN_EMAIL 이면 승인 없이 바로 관리자
+  const bootstrap = process.env.BOOTSTRAP_ADMIN_EMAIL?.toLowerCase();
+  if (bootstrap && email === bootstrap) {
+    const admins = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND password_hash IS NOT NULL"))!.n;
+    if (admins === 0) {
+      const id = await tx(async () => {
+        if (existing) {
+          await run("UPDATE users SET password_hash = ?, role = 'admin' WHERE id = ?", hash, existing.id);
+          return existing.id;
+        }
+        return run("INSERT INTO users (name, email, join_date, status, role, password_hash) VALUES (?, ?, ?, '재직', 'admin', ?)",
+          name, email, today(), hash);
+      });
+      await setSession(id);
+      redirect("/");
+    }
+  }
+
+  // 같은 이메일의 대기 중 요청이 있으면 새 비밀번호로 갱신
+  const pending = await get<{ id: number }>("SELECT id FROM signup_requests WHERE lower(email) = ? AND status = 'pending'", email);
+  if (pending) await run("UPDATE signup_requests SET name = ?, password_hash = ?, created_at = ? WHERE id = ?", name, hash, nowStamp(), pending.id);
+  else await run("INSERT INTO signup_requests (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)", name, email, hash, nowStamp());
+  redirect("/signup?done=1");
+}
+
+/** 가입 승인: 같은 이메일의 구성원이 있으면 연결, 없으면 새 구성원으로 등록 */
+export async function approveSignup(formData: FormData) {
+  const me = await requireAdmin();
+  const req = await get<{ id: number; name: string; email: string; password_hash: string; status: string }>(
+    "SELECT * FROM signup_requests WHERE id = ?", num(formData, "id"));
+  if (!req || req.status !== "pending") return;
+  await tx(async () => {
+    const user = await get<{ id: number }>("SELECT id FROM users WHERE lower(email) = ? AND status != '퇴사'", req.email.toLowerCase());
+    if (user) await run("UPDATE users SET password_hash = ? WHERE id = ?", req.password_hash, user.id);
+    else
+      await run("INSERT INTO users (name, email, join_date, status, role, password_hash) VALUES (?, ?, ?, '재직', 'member', ?)",
+        req.name, req.email.toLowerCase(), today(), req.password_hash);
+    await run("UPDATE signup_requests SET status = 'approved', decided_at = ?, decided_by = ? WHERE id = ?", nowStamp(), me.id, req.id);
+  });
+  refreshAll();
+}
+
+export async function rejectSignup(formData: FormData) {
+  const me = await requireAdmin();
+  await run("UPDATE signup_requests SET status = 'rejected', decided_at = ?, decided_by = ? WHERE id = ? AND status = 'pending'",
+    nowStamp(), me.id, num(formData, "id"));
+  refreshAll();
+}
+
+/** 관리자: 비밀번호 로그인 초기화 (다시 가입 요청 → 승인 필요) */
+export async function resetLogin(formData: FormData) {
+  const me = await requireAdmin();
+  const user = await getUser(num(formData, "user_id"));
+  if (!user) return;
+  if (user.id === me.id) throw new Error("본인 계정은 비밀번호 변경을 이용해주세요.");
+  await run("UPDATE users SET password_hash = NULL WHERE id = ?", user.id);
+  await run("DELETE FROM login_attempts WHERE email = ?", user.email.toLowerCase());
+  refreshAll();
+}
+
+export async function changePassword(formData: FormData) {
+  const me = await currentUser();
+  const back = (code: string) => redirect(`/people/${me.id}?pw=${code}`);
+  const row = await get<{ password_hash: string | null }>("SELECT password_hash FROM users WHERE id = ?", me.id);
+  if (!(await verifyPassword(String(formData.get("current") ?? ""), row?.password_hash))) back("wrong");
+  const next = String(formData.get("next") ?? "");
+  if (next !== String(formData.get("next2") ?? "")) back("mismatch");
+  if (passwordProblem(next)) back("weak");
+  await run("UPDATE users SET password_hash = ? WHERE id = ?", await hashPassword(next), me.id);
+  back("changed");
 }
 
 // ── 공지 ──────────────────────────────────────────────

@@ -1,12 +1,21 @@
 import { notFound } from "next/navigation";
-import { currentUser } from "@/lib/auth";
+import { authMode, currentUser } from "@/lib/auth";
+import { changePassword, resetLogin } from "@/app/actions";
 import { annualBalance, departmentPath, getUser, listAdjustments, listDepartments, listLeaveRequests } from "@/lib/queries";
 import { fmtDate, fmtDuration, tenure, today } from "@/lib/dates";
 import { Avatar, PageShell, StatusBadge } from "@/components/ui";
 import { MemberForm } from "@/components/MemberForm";
 
-export default async function MemberPage({ params }: { params: Promise<{ id: string }> }) {
+const PW_MSG: Record<string, [string, boolean]> = {
+  changed: ["비밀번호를 바꿨어요.", true],
+  wrong: ["현재 비밀번호가 맞지 않아요.", false],
+  mismatch: ["새 비밀번호 확인이 일치하지 않아요.", false],
+  weak: ["비밀번호는 8자 이상, 영문과 숫자를 모두 넣어주세요.", false],
+};
+
+export default async function MemberPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ pw?: string }> }) {
   const { id } = await params;
+  const { pw } = await searchParams;
   const me = await currentUser();
   const user = await getUser(Number(id));
   if (!user) notFound();
@@ -106,6 +115,36 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
           </section>
         )}
       </div>
+
+      {authMode() === "password" && (me.id === user.id || isAdmin) && (
+        <section className="card mt-6 max-w-3xl p-6">
+          <h2 className="font-semibold">로그인 계정</h2>
+          <p className="mt-1 text-sm text-ink-500">
+            {user.email} · {user.has_login ? "비밀번호 로그인 사용 중" : "로그인 계정 없음 (회원가입 후 승인 필요)"}
+          </p>
+          {pw && PW_MSG[pw] && (
+            <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${PW_MSG[pw][1] ? "bg-brand-50 text-brand-700" : "bg-red-50 text-red-600"}`}>{PW_MSG[pw][0]}</p>
+          )}
+          {me.id === user.id ? (
+            <form action={changePassword} className="mt-4 grid gap-3 sm:grid-cols-3">
+              <input name="current" type="password" className="input" placeholder="현재 비밀번호" autoComplete="current-password" required />
+              <input name="next" type="password" className="input" placeholder="새 비밀번호 (8자 이상, 영문+숫자)" autoComplete="new-password" minLength={8} required />
+              <input name="next2" type="password" className="input" placeholder="새 비밀번호 확인" autoComplete="new-password" minLength={8} required />
+              <div className="sm:col-span-3">
+                <button className="btn-secondary">비밀번호 변경</button>
+              </div>
+            </form>
+          ) : (
+            user.has_login && (
+              <form action={resetLogin} className="mt-4">
+                <input type="hidden" name="user_id" value={user.id} />
+                <button className="btn-danger">로그인 초기화</button>
+                <p className="mt-2 text-xs text-ink-500">비밀번호를 지워요. 본인이 다시 회원가입하고 승인을 받아야 로그인할 수 있어요.</p>
+              </form>
+            )
+          )}
+        </section>
+      )}
     </PageShell>
   );
 }

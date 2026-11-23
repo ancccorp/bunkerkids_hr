@@ -3,13 +3,15 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { get } from "./db";
-import type { User } from "./queries";
+import { USER_COLUMNS, type User } from "./queries";
 
 /**
  * 인증
  *  - google: Google Workspace OAuth. ALLOWED_EMAIL_DOMAIN 계정 중 구성원으로 등록된 이메일만 로그인.
- *  - dev   : 로그인 화면에서 구성원을 골라 들어간다. 로컬에서 GOOGLE_CLIENT_ID 가 없을 때만.
- *  - unconfigured: Vercel 등 배포 환경인데 Google 설정이 없을 때. 아무도 로그인할 수 없다
+ *  - password: 이메일·비밀번호. 회원가입 후 관리자가 승인해야 로그인된다.
+ *              배포 환경(Vercel)에서 Google 설정이 없으면 기본값. 로컬은 AUTH_MODE=password 로 켤 수 있다.
+ *  - dev   : 로그인 화면에서 구성원을 골라 들어간다. 로컬에서만.
+ *  - unconfigured: 배포 환경인데 AUTH_SECRET 이 없을 때. 아무도 로그인할 수 없다
  *    (배포본이 개발 모드로 열려 누구나 관리자로 들어오는 사고를 막는다).
  * 세션은 HMAC-SHA256 으로 서명한 쿠키(userId.만료시각.서명)이며 12시간 유효.
  */
@@ -17,9 +19,12 @@ import type { User } from "./queries";
 export const SESSION_COOKIE = "hr_session";
 const SESSION_HOURS = 12;
 
-export function authMode(): "google" | "dev" | "unconfigured" {
-  if (process.env.GOOGLE_CLIENT_ID) return "google";
-  if (process.env.VERCEL) return "unconfigured";
+export type AuthMode = "google" | "password" | "dev" | "unconfigured";
+
+export function authMode(): AuthMode {
+  const hasSecret = (process.env.AUTH_SECRET ?? "").length >= 32;
+  if (process.env.GOOGLE_CLIENT_ID) return hasSecret ? "google" : "unconfigured";
+  if (process.env.VERCEL || process.env.AUTH_MODE === "password") return hasSecret ? "password" : "unconfigured";
   return "dev";
 }
 
@@ -27,8 +32,9 @@ let devSecret: string | undefined;
 function secret() {
   const s = process.env.AUTH_SECRET;
   if (s && s.length >= 32) return s;
-  if (authMode() === "google") throw new Error("AUTH_SECRET (32자 이상) 환경 변수가 필요합니다.");
-  devSecret ??= crypto.randomBytes(32).toString("hex"); // dev: 서버 재시작 시 로그아웃
+  // google·password 모드는 authMode() 가 AUTH_SECRET 을 요구하므로 여기 오지 않는다.
+  // dev·unconfigured 는 임시 키를 쓴다 (dev: 서버 재시작 시 로그아웃, unconfigured: 애초에 로그인 불가).
+  devSecret ??= crypto.randomBytes(32).toString("hex");
   return devSecret;
 }
 
@@ -60,7 +66,7 @@ export async function setSession(userId: number) {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production" && authMode() === "google",
+    secure: process.env.NODE_ENV === "production" && authMode() !== "dev",
     maxAge: SESSION_HOURS * 3600,
   });
 }
@@ -69,7 +75,7 @@ export async function clearSession() {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
-const USER_SQL = "SELECT u.*, d.name AS department_name FROM users u LEFT JOIN departments d ON d.id = u.department_id WHERE u.id = ? AND u.status != '퇴사'";
+const USER_SQL = `SELECT ${USER_COLUMNS}, d.name AS department_name FROM users u LEFT JOIN departments d ON d.id = u.department_id WHERE u.id = ? AND u.status != '퇴사'`;
 
 /** 로그인하지 않았으면 null */
 export async function sessionUser(): Promise<User | null> {

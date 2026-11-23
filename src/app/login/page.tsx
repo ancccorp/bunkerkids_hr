@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { authMode, sessionUser } from "@/lib/auth";
 import { listUsers } from "@/lib/queries";
-import { devLogin } from "@/app/actions";
+import Link from "next/link";
+import { devLogin, passwordLogin } from "@/app/actions";
 
 const ERRORS: Record<string, string> = {
   state: "로그인 요청이 만료되었어요. 다시 시도해주세요.",
@@ -10,11 +11,15 @@ const ERRORS: Record<string, string> = {
   unverified: "이메일 인증이 완료된 Google 계정만 사용할 수 있어요.",
   domain: "회사 Google Workspace 계정으로 로그인해주세요.",
   not_member: "등록된 구성원이 아니에요. 인사 담당자에게 계정 등록을 요청해주세요.",
+  missing: "이메일과 비밀번호를 입력해주세요.",
+  invalid: "이메일 또는 비밀번호가 맞지 않아요.",
+  locked: "로그인에 여러 번 실패해 15분 동안 잠겼어요. 잠시 후 다시 시도해주세요.",
+  pending: "가입 요청이 아직 승인되지 않았어요. 관리자 승인 후 로그인할 수 있어요.",
 };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; signed?: string }> }) {
   if (await sessionUser()) redirect("/");
-  const { error } = await searchParams;
+  const { error, signed } = await searchParams;
   const mode = authMode();
   const users = mode === "dev" ? await listUsers({ statuses: ["재직", "수습", "휴직", "퇴사예정"] }) : [];
 
@@ -52,7 +57,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </div>
           <h1 className="text-2xl font-bold tracking-tight">로그인</h1>
           <p className="mb-6 mt-1 text-sm text-ink-500">
-            {mode === "dev" ? "개발 모드: 구성원을 골라 로그인하세요." : "회사 Google Workspace 계정으로 로그인하세요."}
+            {mode === "dev"
+              ? "개발 모드: 구성원을 골라 로그인하세요."
+              : mode === "password"
+                ? "회사 이메일과 비밀번호로 로그인하세요."
+                : "회사 Google Workspace 계정으로 로그인하세요."}
           </p>
           {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-600">{ERRORS[error] ?? "로그인에 실패했어요."}</p>}
           {mode === "google" ? (
@@ -65,9 +74,33 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               </svg>
               Google 계정으로 로그인
             </a>
+          ) : mode === "password" ? (
+            <form action={passwordLogin} className="space-y-3">
+              {signed && <p className="rounded-lg bg-brand-50 px-3 py-2.5 text-sm text-brand-700">가입 요청을 보냈어요. 관리자가 승인하면 로그인할 수 있어요.</p>}
+              <div>
+                <label className="label" htmlFor="email">
+                  회사 이메일
+                </label>
+                <input id="email" name="email" type="email" autoComplete="username" className="input h-11" required />
+              </div>
+              <div>
+                <label className="label" htmlFor="password">
+                  비밀번호
+                </label>
+                <input id="password" name="password" type="password" autoComplete="current-password" className="input h-11" required />
+              </div>
+              <button className="btn-primary h-11 w-full text-[15px]">로그인</button>
+              <p className="pt-2 text-center text-sm text-ink-500">
+                처음이신가요?{" "}
+                <Link href="/signup" className="font-semibold text-brand-600 hover:underline">
+                  회원가입
+                </Link>
+              </p>
+              <p className="text-center text-xs text-ink-400">비밀번호를 잊었다면 관리자에게 로그인 초기화를 요청하세요.</p>
+            </form>
           ) : mode === "unconfigured" ? (
             <p className="rounded-lg bg-amber-50 px-3 py-2.5 text-sm leading-relaxed text-amber-800">
-              Google 로그인이 아직 설정되지 않았어요. 관리자는 배포 환경 변수에 GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, AUTH_SECRET 을 넣고 다시 배포해주세요.
+              로그인이 아직 설정되지 않았어요. 관리자는 배포 환경 변수에 AUTH_SECRET(32자 이상)을 넣고 다시 배포해주세요.
             </p>
           ) : (
             <form action={devLogin} className="space-y-3">

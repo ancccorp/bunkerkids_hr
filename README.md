@@ -7,7 +7,7 @@
 
 | 메뉴 | 내용 |
 | --- | --- |
-| 로그인 | Google Workspace 계정(회사 도메인 제한), 12시간 서명 세션. 미설정 시 개발 모드 |
+| 로그인 | 이메일·비밀번호 가입 → 관리자 승인 (베타 기본), 또는 Google Workspace. 회사 도메인 제한, 5회 실패 시 15분 잠금, 12시간 서명 세션 |
 | 홈 피드 | 내가 결재할 할 일, 최근 공지, 동료 인정, 이번 주 캘린더·공휴일 |
 | 공지 | 목록/상세, 카테고리, 리액션, 댓글, 숨김 (작성은 관리자) |
 | 구성원 / 구성원 관리 | 디렉터리, 프로필, 재직상태 필터 표, 근속기간, CSV 다운로드, 연봉·부양가족 등 급여 정보 |
@@ -36,12 +36,10 @@ npm test           # 연차·급여 계산 단위 테스트
 ## 운영 배포 (Supabase + Vercel)
 
 1. **Supabase**: 새 프로젝트를 Northeast Asia (Seoul) 리전에 만들고, Connect › Direct › **Transaction pooler**(포트 6543) 연결 문자열을 확인합니다.
-2. **Google Cloud Console**: OAuth 클라이언트(웹 애플리케이션)를 만들고 승인된 리디렉션 URI에 `{APP_URL}/api/auth/callback`을 등록합니다.
-3. **Vercel**: GitHub 저장소를 Import하고 Environment Variables에 `.env.example`의 값을 넣습니다
-   (`DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_EMAIL_DOMAIN`, `APP_URL`, `AUTH_SECRET`, `BOOTSTRAP_ADMIN_EMAIL`). Vercel 함수 리전은 Seoul(icn1)로 맞추면 DB와 가까워집니다.
-4. 첫 요청 때 테이블이 자동 생성되고, 운영 모드에서는 데모 데이터 없이 휴가 유형·공휴일만 들어갑니다.
-5. `BOOTSTRAP_ADMIN_EMAIL` 계정으로 로그인 → 설정에서 회사 정보·조직·결재라인을 입력 → 구성원을 등록합니다.
-   구성원의 회사 이메일이 Google 계정과 같아야 로그인할 수 있습니다.
+2. **Vercel**: GitHub 저장소를 Import하고 Environment Variables에 `DATABASE_URL`, `AUTH_SECRET`, `ALLOWED_EMAIL_DOMAIN`, `BOOTSTRAP_ADMIN_EMAIL`을 넣습니다. 리전은 `vercel.json`에서 서울(icn1)로 지정되어 있습니다.
+3. 첫 요청 때 테이블이 자동 생성되고(이후 버전은 자동 마이그레이션), 배포 환경에서는 데모 데이터 없이 휴가 유형·공휴일만 들어갑니다.
+4. 사이트에서 `BOOTSTRAP_ADMIN_EMAIL`로 **회원가입**하면 승인 없이 첫 관리자가 됩니다. 이후 직원은 회원가입 → 관리자가 구성원 관리 › 가입 요청에서 승인합니다.
+5. (선택) Google 로그인으로 바꾸려면 Google Cloud Console에서 OAuth 클라이언트(웹 애플리케이션, 리디렉션 URI `{APP_URL}/api/auth/callback`)를 만들고 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_URL`을 추가합니다. 구성원의 회사 이메일이 Google 계정과 같아야 합니다.
 6. 백업은 Supabase가 매일 자동으로 합니다 (Pro 요금제에서 7일 보관).
 
 ## 구조

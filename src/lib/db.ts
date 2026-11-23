@@ -1,7 +1,7 @@
 import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
-import { SCHEMA, SCHEMA_VERSION } from "./schema";
+import { MIGRATIONS, SCHEMA, SCHEMA_VERSION } from "./schema";
 import { seed } from "./seed";
 
 /**
@@ -56,8 +56,16 @@ async function open(): Promise<Backend> {
     await exec("SELECT pg_advisory_xact_lock(726354)", []); // 여러 인스턴스가 동시에 초기화하지 않도록
     await exec("CREATE TABLE IF NOT EXISTS schema_meta (version INTEGER NOT NULL)", []);
     const [meta] = await exec("SELECT version FROM schema_meta", []);
-    if (meta && meta.version !== SCHEMA_VERSION) {
-      throw new Error(`DB 스키마 버전(${meta.version})이 앱(${SCHEMA_VERSION})과 다릅니다. 마이그레이션이 필요합니다.`);
+    if (meta && Number(meta.version) > SCHEMA_VERSION) {
+      throw new Error(`DB 스키마 버전(${meta.version})이 앱(${SCHEMA_VERSION})보다 높습니다. 앱을 최신으로 배포하세요.`);
+    }
+    if (meta && Number(meta.version) < SCHEMA_VERSION) {
+      for (let v = Number(meta.version) + 1; v <= SCHEMA_VERSION; v++) {
+        const steps = MIGRATIONS[v];
+        if (!steps) throw new Error(`스키마 ${v} 버전으로 올리는 마이그레이션이 없습니다.`);
+        for (const stmt of steps) await exec(stmt, []);
+      }
+      await exec("UPDATE schema_meta SET version = $1", [SCHEMA_VERSION]);
     }
     if (!meta) {
       for (const stmt of SCHEMA.split(/;\s*\n/).map((s) => s.trim()).filter(Boolean)) await exec(stmt, []);
@@ -113,7 +121,7 @@ export async function get<T>(sql: string, ...params: Param[]): Promise<T | undef
   return ((await exec(sql, params))[0] as T | undefined) ?? undefined;
 }
 
-const NO_ID = new Set(["settings", "holidays", "notice_reactions", "schema_meta"]);
+const NO_ID = new Set(["settings", "holidays", "notice_reactions", "schema_meta", "login_attempts"]);
 
 /** 쓰기 실행. id 컬럼이 있는 테이블의 INSERT 는 새 id 를 돌려준다. */
 export async function run(sql: string, ...params: Param[]): Promise<number> {

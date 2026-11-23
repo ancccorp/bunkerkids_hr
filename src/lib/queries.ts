@@ -23,6 +23,7 @@ export type User = {
   annual_salary: number | null;
   meal_allowance: number;
   dependents: number;
+  has_login?: boolean;
   department_name?: string | null;
 };
 
@@ -97,7 +98,9 @@ export type ApprovalStep = {
 
 // ── 구성원/조직 ─────────────────────────────────────────
 
-const USER_SELECT = `SELECT u.*, d.name AS department_name FROM users u LEFT JOIN departments d ON d.id = u.department_id`;
+/** 비밀번호 해시는 절대 조회하지 않는다 (has_login 으로 여부만) */
+export const USER_COLUMNS = "u.id, u.name, u.title, u.email, u.personal_email, u.phone, u.employee_no, u.join_date, u.leave_date, u.status, u.department_id, u.role, u.color, u.birth_date, u.annual_salary, u.meal_allowance, u.dependents, (u.password_hash IS NOT NULL) AS has_login";
+const USER_SELECT = `SELECT ${USER_COLUMNS}, d.name AS department_name FROM users u LEFT JOIN departments d ON d.id = u.department_id`;
 
 export async function listUsers(opts: { statuses?: string[]; q?: string } = {}) {
   const where: string[] = [];
@@ -385,9 +388,9 @@ export async function documentSteps(documentId: number) {
 
 // ── 할 일 (내가 결재할 항목) ────────────────────────────
 
-export type Todo = { kind: "leave" | "document"; id: number; from: string; title: string; tag: string; created_at: string; href: string };
+export type Todo = { kind: "leave" | "document" | "signup"; id: number; from: string; title: string; tag: string; created_at: string; href: string };
 
-export async function todosFor(userId: number): Promise<Todo[]> {
+export async function todosFor(userId: number, isAdmin = false): Promise<Todo[]> {
   const leaves = (await listLeaveRequests({ approverId: userId, status: "pending" })).map<Todo>((l) => ({
     kind: "leave",
     id: l.id,
@@ -408,7 +411,19 @@ export async function todosFor(userId: number): Promise<Todo[]> {
     created_at: d.created_at,
     href: `/workflow/${d.id}`,
   }));
-  return [...leaves, ...docs].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const signups = isAdmin
+    ? (await all<{ id: number; name: string; email: string; created_at: string }>(
+        "SELECT id, name, email, created_at FROM signup_requests WHERE status = 'pending'")).map<Todo>((r) => ({
+        kind: "signup",
+        id: r.id,
+        from: r.name,
+        title: `'${r.email}' 가입 승인 요청`,
+        tag: "가입 요청",
+        created_at: r.created_at,
+        href: "/people/manage?view=signups",
+      }))
+    : [];
+  return [...leaves, ...docs, ...signups].sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
 export async function listKudos(limit = 5) {
