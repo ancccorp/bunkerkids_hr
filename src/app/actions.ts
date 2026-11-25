@@ -11,6 +11,7 @@ import { nowStamp, today } from "@/lib/dates";
 import { annualBalance, documentSteps, findApprover, getDocument, getLeaveRequest, getUser, leaveMinutes } from "@/lib/queries";
 import { DEFAULT_SETTINGS, setSetting, type SettingKey } from "@/lib/settings";
 import { buildPayslip, certificateSnapshot } from "@/lib/hr";
+import { audit } from "@/lib/audit";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const num = (f: FormData, k: string) => Number(f.get(k));
@@ -133,14 +134,17 @@ export async function approveSignup(formData: FormData) {
       await run("INSERT INTO users (name, email, join_date, status, role, password_hash) VALUES (?, ?, ?, '재직', 'member', ?)",
         req.name, req.email.toLowerCase(), today(), req.password_hash);
     await run("UPDATE signup_requests SET status = 'approved', decided_at = ?, decided_by = ? WHERE id = ?", nowStamp(), me.id, req.id);
+    await audit(me, "account.approve", `가입 승인: ${req.name} (${req.email})${user ? " · 기존 구성원에 연결" : " · 새 구성원 등록"}`, { type: "signup", id: req.id });
   });
   refreshAll();
 }
 
 export async function rejectSignup(formData: FormData) {
   const me = await requireAdmin();
-  await run("UPDATE signup_requests SET status = 'rejected', decided_at = ?, decided_by = ? WHERE id = ? AND status = 'pending'",
-    nowStamp(), me.id, num(formData, "id"));
+  const req = await get<{ id: number; name: string; email: string }>("SELECT id, name, email FROM signup_requests WHERE id = ? AND status = 'pending'", num(formData, "id"));
+  if (!req) return;
+  await run("UPDATE signup_requests SET status = 'rejected', decided_at = ?, decided_by = ? WHERE id = ?", nowStamp(), me.id, req.id);
+  await audit(me, "account.reject", `가입 거절: ${req.name} (${req.email})`, { type: "signup", id: req.id });
   refreshAll();
 }
 
@@ -152,6 +156,7 @@ export async function resetLogin(formData: FormData) {
   if (user.id === me.id) throw new Error("본인 계정은 비밀번호 변경을 이용해주세요.");
   await run("UPDATE users SET password_hash = NULL WHERE id = ?", user.id);
   await run("DELETE FROM login_attempts WHERE email = ?", user.email.toLowerCase());
+  await audit(me, "account.reset", `로그인 초기화: ${user.name}`, { type: "user", id: user.id });
   refreshAll();
 }
 
@@ -252,6 +257,9 @@ async function decideLeave(formData: FormData, approve: boolean) {
   if (!req || req.status !== "pending") return;
   if (req.approver_id !== me.id && me.role !== "admin") throw new Error("결재 권한이 없습니다.");
   await run("UPDATE leave_requests SET status = ?, decided_at = ? WHERE id = ?", approve ? "approved" : "rejected", nowStamp(), req.id);
+  await audit(me, approve ? "leave.approve" : "leave.reject",
+    `휴가 ${approve ? "승인" : "반려"}: ${req.user_name} ${req.type_name} ${req.start_date}${req.end_date !== req.start_date ? `~${req.end_date}` : ""}${req.approver_id !== me.id ? " (대리 결재)" : ""}`,
+    { type: "leave", id: req.id });
   refreshAll();
 }
 
@@ -265,6 +273,7 @@ export async function adjustLeave(formData: FormData) {
   const { periodStart } = await annualBalance(user);
   await run("INSERT INTO leave_adjustments (user_id, period_start, minutes, reason, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
     user.id, periodStart, Math.round(hours * 60), reason, me.id, nowStamp());
+  await audit(me, "leave.adjust", `연차 조정: ${user.name} ${hours > 0 ? "+" : ""}${hours}시간 (${reason})`, { type: "user", id: user.id });
   refreshAll();
 }
 
@@ -286,8 +295,18 @@ export async function saveWorkRecord(formData: FormData) {
 
 // ── 구성원 ─────────────────────────────────────────────
 
+const AUDITED_FIELDS: Record<string, string> = {
+  role: "권한",
+  status: "재직 상태",
+  annual_salary: "연봉",
+  department_id: "조직",
+  join_date: "입사일",
+  leave_date: "퇴사일",
+  email: "이메일",
+};
+
 export async function saveMember(formData: FormData) {
-  await requireAdmin();
+  const me = await requireAdmin();
   const id = num(formData, "id");
   const fields = {
     name: str(formData, "name"),
@@ -311,12 +330,21 @@ export async function saveMember(formData: FormData) {
   const vals = Object.values(fields);
   let userId = id;
   if (id) {
+    const before = await get<Record<string, unknown>>(`SELECT ${Object.keys(AUDITED_FIELDS).join(", ")} FROM users WHERE id = ?`, id);
+    if (before?.role === "admin" && fields.role !== "admin") await assertAnotherAdmin(id);
     await run(`UPDATE users SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, ...vals, id);
+    const after = fields as Record<string, unknown>;
+    const changes = Object.entries(AUDITED_FIELDS)
+      .filter(([k]) => String(before?.[k] ?? "") !== String(after[k] ?? ""))
+      .map(([k, label]) => `${label} ${before?.[k] ?? "-"} → ${after[k] ?? "-"}`);
+    await audit(me, changes.some((c) => c.startsWith("권한")) ? "role.change" : "member.update",
+      `구성원 수정: ${fields.name}${changes.length ? ` (${changes.join(", ")})` : ""}`, { type: "user", id });
   } else {
     const palette = ["#f97066", "#9e77ed", "#36bffa", "#fdb022", "#32d583", "#ee46bc", "#6172f3", "#fd853a"];
     userId = await run(
       `INSERT INTO users (${cols.join(", ")}, color) VALUES (${cols.map(() => "?").join(", ")}, ?)`,
       ...vals, palette[Math.floor(Math.random() * palette.length)]);
+    await audit(me, "member.create", `구성원 등록: ${fields.name} (${fields.email}, ${fields.status})`, { type: "user", id: userId });
   }
   refreshAll();
   redirect(`/people/${userId}`);
@@ -373,6 +401,9 @@ async function decideDocument(formData: FormData, approve: boolean) {
     if (next) await run("UPDATE approval_steps SET status = 'pending' WHERE id = ?", next.id);
     else await run("UPDATE documents SET status = 'approved' WHERE id = ?", doc.id);
   });
+  await audit(me, approve ? "document.approve" : "document.reject",
+    `문서 ${approve ? "승인" : "반려"} (${current.step}차): ${doc.title}${doc.amount ? ` · ${doc.amount.toLocaleString("ko-KR")}원` : ""}`,
+    { type: "document", id: doc.id });
   refreshAll();
 }
 
@@ -399,15 +430,15 @@ export async function sendKudos(formData: FormData) {
 // ── 설정 ──────────────────────────────────────────────
 
 export async function saveSettings(formData: FormData) {
-  await requireAdmin();
-  for (const key of Object.keys(DEFAULT_SETTINGS) as SettingKey[]) {
-    if (formData.has(key)) await setSetting(key, str(formData, key));
-  }
+  const me = await requireAdmin();
+  const keys = (Object.keys(DEFAULT_SETTINGS) as SettingKey[]).filter((k) => formData.has(k));
+  for (const key of keys) await setSetting(key, str(formData, key));
+  await audit(me, "settings.update", `설정 변경: ${keys.map((k) => `${k}=${str(formData, k)}`).join(", ")}`);
   refreshAll();
 }
 
 export async function saveDepartment(formData: FormData) {
-  await requireAdmin();
+  const me = await requireAdmin();
   const id = num(formData, "id");
   const name = str(formData, "name");
   const parent = num(formData, "parent_id") || null;
@@ -416,21 +447,25 @@ export async function saveDepartment(formData: FormData) {
   if (id && parent === id) throw new Error("자기 자신을 상위 조직으로 지정할 수 없습니다.");
   if (id) await run("UPDATE departments SET name = ?, parent_id = ?, approver_id = ? WHERE id = ?", name, parent, approver, id);
   else await run("INSERT INTO departments (name, parent_id, approver_id) VALUES (?, ?, ?)", name, parent, approver);
+  const approverName = approver ? (await getUser(approver))?.name : null;
+  await audit(me, "settings.department", `조직 ${id ? "수정" : "추가"}: ${name} · 결재권자 ${approverName ?? "상위 조직"}`, { type: "department", id: id || null });
   refreshAll();
 }
 
 export async function addHoliday(formData: FormData) {
-  await requireAdmin();
+  const me = await requireAdmin();
   const date = str(formData, "date");
   const name = str(formData, "name");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !name) throw new Error("날짜와 이름을 입력해주세요.");
   await run("INSERT INTO holidays (date, name) VALUES (?, ?) ON CONFLICT (date) DO UPDATE SET name = excluded.name", date, name);
+  await audit(me, "settings.holiday", `공휴일 추가: ${date} ${name}`);
   refreshAll();
 }
 
 export async function deleteHoliday(formData: FormData) {
-  await requireAdmin();
+  const me = await requireAdmin();
   await run("DELETE FROM holidays WHERE date = ?", str(formData, "date"));
+  await audit(me, "settings.holiday", `공휴일 삭제: ${str(formData, "date")}`);
   refreshAll();
 }
 
@@ -450,6 +485,7 @@ export async function issueCertificate(formData: FormData) {
   const issueNo = `BK-${year}-${String(seq).padStart(4, "0")}`;
   const id = await run("INSERT INTO certificates (user_id, type, purpose, issue_no, snapshot, issued_at) VALUES (?, ?, ?, ?, ?, ?)",
     user.id, type, purpose, issueNo, JSON.stringify(await certificateSnapshot(user)), nowStamp());
+  await audit(me, "certificate.issue", `${type === "career" ? "경력" : "재직"}증명서 발급: ${user.name} · ${issueNo} · ${purpose}`, { type: "certificate", id });
   refreshAll();
   redirect(`/certificates/${id}`);
 }
@@ -467,6 +503,7 @@ export async function createContract(formData: FormData) {
     `INSERT INTO contracts (user_id, template, title, body, annual_salary, status, created_by, created_at, body_hash)
      VALUES (?, ?, ?, ?, ?, 'sent', ?, ?, ?)`,
     user.id, str(formData, "template"), str(formData, "title"), body, num(formData, "annual_salary") || null, me.id, nowStamp(), sha256(body));
+  await audit(me, "contract.send", `계약서 발송: ${user.name} · ${str(formData, "title")}`, { type: "contract", id });
   refreshAll();
   redirect(`/contracts/${id}`);
 }
@@ -485,20 +522,22 @@ export async function signContract(formData: FormData) {
     await run("UPDATE contracts SET status = 'signed', signed_at = ?, signer_name = ?, signer_ip = ? WHERE id = ?",
       nowStamp(), me.name, sha256(ip), c.id);
     if (c.annual_salary) await run("UPDATE users SET annual_salary = ? WHERE id = ?", c.annual_salary, me.id);
+    await audit(me, "contract.sign", `계약서 서명: ${me.name}${c.annual_salary ? ` · 연봉 ${c.annual_salary.toLocaleString("ko-KR")}원 반영` : ""}`, { type: "contract", id: c.id });
   });
   refreshAll();
 }
 
 export async function voidContract(formData: FormData) {
-  await requireAdmin();
+  const me = await requireAdmin();
   await run("UPDATE contracts SET status = 'void' WHERE id = ? AND status = 'sent'", num(formData, "id"));
+  await audit(me, "contract.void", `계약서 폐기 #${num(formData, "id")}`, { type: "contract", id: num(formData, "id") });
   refreshAll();
 }
 
 // ── 급여 ──────────────────────────────────────────────
 
 export async function createPayrollRun(formData: FormData) {
-  await requireAdmin();
+  const me = await requireAdmin();
   const month = str(formData, "month");
   if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("정산 월을 선택해주세요.");
   if (await get("SELECT 1 FROM payroll_runs WHERE month = ?", month)) throw new Error("이미 생성된 정산 월입니다.");
@@ -508,6 +547,7 @@ export async function createPayrollRun(formData: FormData) {
   const id = await tx(async () => {
     const runId = await run("INSERT INTO payroll_runs (month, pay_date, status, created_at) VALUES (?, ?, 'draft', ?)", month, payDate, nowStamp());
     await buildPayslip(runId, month);
+    await audit(me, "payroll.create", `급여 대장 생성: ${month}`, { type: "payroll", id: runId });
     return runId;
   });
   refreshAll();
@@ -515,7 +555,7 @@ export async function createPayrollRun(formData: FormData) {
 }
 
 export async function updatePayslip(formData: FormData) {
-  await requireAdmin();
+  const me = await requireAdmin();
   const slip = await get<{ id: number; run_id: number; user_id: number }>("SELECT * FROM payslips WHERE id = ?", num(formData, "id"));
   if (!slip) return;
   const runRow = (await get<{ month: string; status: string }>("SELECT month, status FROM payroll_runs WHERE id = ?", slip.run_id))!;
@@ -523,6 +563,10 @@ export async function updatePayslip(formData: FormData) {
   await run("UPDATE payslips SET extra_pay = ?, extra_deduction = ?, memo = ? WHERE id = ?",
     Math.max(0, num(formData, "extra_pay") || 0), Math.max(0, num(formData, "extra_deduction") || 0), str(formData, "memo") || null, slip.id);
   await buildPayslip(slip.run_id, runRow.month, slip.user_id);
+  const who = await getUser(slip.user_id);
+  await audit(me, "payroll.adjust",
+    `급여 조정: ${runRow.month} ${who?.name ?? ""} · 기타수당 ${num(formData, "extra_pay") || 0}원, 기타공제 ${num(formData, "extra_deduction") || 0}원`,
+    { type: "payroll", id: slip.run_id });
   refreshAll();
 }
 
@@ -535,14 +579,41 @@ export async function recalcPayroll(formData: FormData) {
 }
 
 export async function confirmPayroll(formData: FormData) {
-  await requireAdmin();
-  await run("UPDATE payroll_runs SET status = 'confirmed', confirmed_at = ? WHERE id = ? AND status = 'draft'", nowStamp(), num(formData, "id"));
+  const me = await requireAdmin();
+  const r = await get<{ id: number; month: string; net: number; n: number }>(
+    `SELECT r.id, r.month, COALESCE(SUM(p.net), 0) AS net, COUNT(p.id) AS n FROM payroll_runs r
+     LEFT JOIN payslips p ON p.run_id = r.id WHERE r.id = ? AND r.status = 'draft' GROUP BY r.id`, num(formData, "id"));
+  if (!r) return;
+  await run("UPDATE payroll_runs SET status = 'confirmed', confirmed_at = ? WHERE id = ?", nowStamp(), r.id);
+  await audit(me, "payroll.confirm", `급여 확정: ${r.month} · ${r.n}명 · 실지급 ${r.net.toLocaleString("ko-KR")}원`, { type: "payroll", id: r.id });
   refreshAll();
 }
 
 export async function deletePayrollRun(formData: FormData) {
-  await requireAdmin();
+  const me = await requireAdmin();
+  const r = await get<{ month: string }>("SELECT month FROM payroll_runs WHERE id = ? AND status = 'draft'", num(formData, "id"));
   await run("DELETE FROM payroll_runs WHERE id = ? AND status = 'draft'", num(formData, "id"));
+  if (r) await audit(me, "payroll.delete", `급여 대장 삭제: ${r.month}`);
   refreshAll();
   redirect("/payroll");
+}
+
+// ── 권한 ──────────────────────────────────────────────
+
+/** 관리자가 최소 한 명은 남아 있어야 한다 */
+async function assertAnotherAdmin(exceptUserId: number) {
+  const others = (await get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND status != '퇴사' AND id != ?", exceptUserId))!.n;
+  if (others === 0) throw new Error("마지막 관리자의 권한은 회수할 수 없어요. 다른 관리자를 먼저 지정해주세요.");
+}
+
+export async function setRole(formData: FormData) {
+  const me = await requireAdmin();
+  const user = await getUser(num(formData, "user_id"));
+  const role = str(formData, "role") === "admin" ? "admin" : "member";
+  if (!user || user.role === role) return;
+  if (role === "member") await assertAnotherAdmin(user.id);
+  await run("UPDATE users SET role = ? WHERE id = ?", role, user.id);
+  await audit(me, "role.change", `권한 ${role === "admin" ? "부여" : "회수"}: ${user.name} (${user.role} → ${role})`, { type: "user", id: user.id });
+  refreshAll();
 }

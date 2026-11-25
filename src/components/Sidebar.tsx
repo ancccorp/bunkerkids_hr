@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   CalendarCheck,
+  LayoutDashboard,
   Clock,
   FileBadge,
   FileText,
@@ -54,6 +55,7 @@ export function Sidebar({
     { href: "/certificates", label: "증명서", icon: FileBadge },
   ];
   const admin: Item[] = [
+    ...(isAdmin ? [{ href: "/admin", label: "관리자 센터", icon: LayoutDashboard }] : []),
     ...(isAdmin ? [{ href: "/people/manage", label: "구성원 관리", icon: UserCog }] : []),
     ...(isAdmin || isApprover ? [{ href: "/time-off/manage", label: "휴가 관리", icon: CalendarCheck }] : []),
     ...(isAdmin ? [{ href: "/settings", label: "설정", icon: Settings }] : []),
