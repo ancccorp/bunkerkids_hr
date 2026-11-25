@@ -1,0 +1,54 @@
+import { LogOut } from "lucide-react";
+import { Sidebar } from "@/components/Sidebar";
+import { authMode, currentUser } from "@/lib/auth";
+import { get } from "@/lib/db";
+import { isApprover, todosFor } from "@/lib/queries";
+import { getSettings } from "@/lib/settings";
+import { logout } from "@/app/actions";
+import { isDemo } from "@/lib/demo";
+import { Avatar } from "@/components/ui";
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const me = await currentUser();
+  const todoCount = (await todosFor(me.id, me.role === "admin")).length;
+  const signCount = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM contracts WHERE user_id = ? AND status = 'sent'", me.id))!.n;
+
+  const account = (
+    <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
+      <Avatar name={me.name} color={me.color} size={32} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold">{me.name}</div>
+        <div className="truncate text-[11px] text-ink-500">
+          {me.title ?? (me.role === "admin" ? "관리자" : "구성원")}
+          {authMode() === "dev" && (isDemo() ? " · 체험판" : " · 개발 모드")}
+        </div>
+      </div>
+      <form action={logout}>
+        <button className="btn-ghost h-8 w-8 p-0" aria-label="로그아웃" title="로그아웃">
+          <LogOut size={16} />
+        </button>
+      </form>
+    </div>
+  );
+
+  return (
+    <div className="flex min-h-screen flex-col lg:flex-row">
+      <Sidebar
+        isAdmin={me.role === "admin"}
+        isApprover={await isApprover(me.id)}
+        todoCount={todoCount}
+        signCount={signCount}
+        companyName={(await getSettings()).company_name}
+        account={account}
+      />
+      <main className="min-w-0 flex-1 bg-white lg:my-2 lg:mr-2 lg:rounded-2xl lg:border lg:border-ink-200/70 lg:shadow-card">
+        {isDemo() && (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-800 lg:rounded-t-2xl">
+            체험판입니다. 모든 사람·금액은 가상 데이터이며 서버가 다시 시작되면 처음 상태로 돌아가요. 왼쪽 아래에서 로그아웃 후 다른 구성원으로 들어가 볼 수 있어요.
+          </div>
+        )}
+        {children}
+      </main>
+    </div>
+  );
+}

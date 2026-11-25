@@ -2,8 +2,6 @@
 
 export const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 export const DAY_MINUTES = 8 * 60; // 1일 소정근로시간
-export const WORK_START = "10:00";
-export const WORK_END = "19:00";
 
 export function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -136,15 +134,21 @@ export function relative(stamp: string, asOf = today()) {
   return `${Math.floor(days / 365)}년 전`;
 }
 
-/** 근로기준법 제60조 기준 연차 발생일수 (회계연도가 아닌 입사일 기준 단순 계산) */
-export function annualLeaveDays(joinDate: string, year: number) {
-  const join = parseISO(joinDate);
-  const yearsAtStart = year - join.getFullYear();
-  if (yearsAtStart <= 0) {
-    // 입사 첫해: 1개월 개근 시 1일 (최대 11일)
-    const months = 12 - join.getMonth() - 1;
-    return Math.max(0, Math.min(11, months));
-  }
-  if (yearsAtStart < 3) return 15;
-  return Math.min(25, 15 + Math.floor((yearsAtStart - 1) / 2));
+/** 월 단위 이동. 말일 입사자는 해당 월의 말일로 맞춘다 (1/31 + 1개월 = 2/28). */
+export function addMonths(s: string, n: number) {
+  const [y, m, d] = s.split("-").map(Number);
+  const total = y * 12 + (m - 1) + n;
+  const ny = Math.floor(total / 12);
+  const nm = total % 12;
+  const last = new Date(ny, nm + 1, 0).getDate();
+  return `${ny}-${pad(nm + 1)}-${pad(Math.min(d, last))}`;
+}
+
+export function addYears(s: string, n: number) {
+  return addMonths(s, n * 12);
+}
+
+/** 두 날짜 사이 일수 (from 포함, to 미포함) */
+export function daysBetween(from: string, to: string) {
+  return Math.round((parseISO(to).getTime() - parseISO(from).getTime()) / 86400000);
 }

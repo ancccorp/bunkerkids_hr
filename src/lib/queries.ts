@@ -1,6 +1,9 @@
 import "server-only";
+import { cache } from "react";
 import { all, get } from "./db";
-import { addDays, DAY_MINUTES, eachDay, isWeekend, toMinutes, workedMinutes, WORK_END, WORK_START } from "./dates";
+import { addDays, DAY_MINUTES, eachDay, isWeekend, today, toMinutes, workedMinutes } from "./dates";
+import { annualEntitlement, type Entitlement, type LeaveBasis } from "./leave-policy";
+import { getSettings } from "./settings";
 
 export type User = {
   id: number;
@@ -16,6 +19,11 @@ export type User = {
   department_id: number | null;
   role: "admin" | "member";
   color: string;
+  birth_date: string | null;
+  annual_salary: number | null;
+  meal_allowance: number;
+  dependents: number;
+  has_login?: boolean;
   department_name?: string | null;
 };
 
@@ -90,9 +98,11 @@ export type ApprovalStep = {
 
 // ── 구성원/조직 ─────────────────────────────────────────
 
-const USER_SELECT = `SELECT u.*, d.name AS department_name FROM users u LEFT JOIN departments d ON d.id = u.department_id`;
+/** 비밀번호 해시는 절대 조회하지 않는다 (has_login 으로 여부만) */
+export const USER_COLUMNS = "u.id, u.name, u.title, u.email, u.personal_email, u.phone, u.employee_no, u.join_date, u.leave_date, u.status, u.department_id, u.role, u.color, u.birth_date, u.annual_salary, u.meal_allowance, u.dependents, (u.password_hash IS NOT NULL) AS has_login";
+const USER_SELECT = `SELECT ${USER_COLUMNS}, d.name AS department_name FROM users u LEFT JOIN departments d ON d.id = u.department_id`;
 
-export function listUsers(opts: { statuses?: string[]; q?: string } = {}) {
+export async function listUsers(opts: { statuses?: string[]; q?: string } = {}) {
   const where: string[] = [];
   const params: string[] = [];
   if (opts.statuses?.length) {
@@ -100,22 +110,21 @@ export function listUsers(opts: { statuses?: string[]; q?: string } = {}) {
     params.push(...opts.statuses);
   }
   if (opts.q) {
-    where.push("(u.name LIKE ? OR u.email LIKE ? OR u.title LIKE ? OR d.name LIKE ?)");
+    where.push("(u.name ILIKE ? OR u.email ILIKE ? OR u.title ILIKE ? OR d.name ILIKE ?)");
     params.push(...Array(4).fill(`%${opts.q}%`));
   }
-  return all<User>(`${USER_SELECT} ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY u.name COLLATE NOCASE`, ...params);
+  return all<User>(`${USER_SELECT} ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY lower(u.name)`, ...params);
 }
 
-export function getUser(id: number) {
+export async function getUser(id: number) {
   return get<User>(`${USER_SELECT} WHERE u.id = ?`, id);
 }
 
-export function listDepartments() {
-  return all<Department>("SELECT * FROM departments ORDER BY id");
-}
+/** 요청 단위로 캐시 (한 화면에서 여러 번 불려도 한 번만 조회) */
+export const listDepartments = cache(() => all<Department>("SELECT * FROM departments ORDER BY id"));
 
 /** "벙커키즈 › Business › Operation" */
-export function departmentPath(deptId: number | null, depts = listDepartments()) {
+export function departmentPath(deptId: number | null, depts: Department[]) {
   const byId = new Map(depts.map((d) => [d.id, d]));
   const names: string[] = [];
   let cur = deptId ? byId.get(deptId) : undefined;
@@ -127,10 +136,10 @@ export function departmentPath(deptId: number | null, depts = listDepartments())
 }
 
 /** 결재권자 찾기: 소속 조직부터 위로 올라가며 본인이 아닌 첫 결재권자 */
-export function findApprover(userId: number): number | null {
-  const user = getUser(userId);
+export async function findApprover(userId: number): Promise<number | null> {
+  const user = await getUser(userId);
   if (!user) return null;
-  const depts = listDepartments();
+  const depts = await listDepartments();
   const byId = new Map(depts.map((d) => [d.id, d]));
   let cur = user.department_id ? byId.get(user.department_id) : undefined;
   while (cur) {
@@ -138,18 +147,18 @@ export function findApprover(userId: number): number | null {
     cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
   }
   // 최상위 결재권자 본인이면 관리자 중 다른 사람, 없으면 자기 자신(자동 승인)
-  const admin = get<{ id: number }>("SELECT id FROM users WHERE role = 'admin' AND id != ? ORDER BY id LIMIT 1", userId);
+  const admin = await get<{ id: number }>("SELECT id FROM users WHERE role = 'admin' AND id != ? ORDER BY id LIMIT 1", userId);
   return admin?.id ?? null;
 }
 
 /** 조직 결재권자로 지정된 사람인지 */
-export function isApprover(userId: number) {
-  return !!get("SELECT 1 FROM departments WHERE approver_id = ?", userId);
+export async function isApprover(userId: number) {
+  return !!(await get("SELECT 1 FROM departments WHERE approver_id = ?", userId));
 }
 
 // ── 휴가 ──────────────────────────────────────────────
 
-export function listLeaveTypes() {
+export async function listLeaveTypes() {
   return all<LeaveType>("SELECT * FROM leave_types ORDER BY id");
 }
 
@@ -160,7 +169,7 @@ const LEAVE_SELECT = `
   JOIN users u ON u.id = r.user_id
   LEFT JOIN users a ON a.id = r.approver_id`;
 
-export function listLeaveRequests(opts: { userId?: number; approverId?: number; status?: string; year?: number; from?: string; to?: string } = {}) {
+export async function listLeaveRequests(opts: { userId?: number; approverId?: number; status?: string; year?: number; from?: string; to?: string } = {}) {
   const where: string[] = [];
   const params: (string | number)[] = [];
   if (opts.userId) (where.push("r.user_id = ?"), params.push(opts.userId));
@@ -171,49 +180,108 @@ export function listLeaveRequests(opts: { userId?: number; approverId?: number; 
   return all<LeaveRequest>(`${LEAVE_SELECT} ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY r.start_date DESC, r.id DESC`, ...params);
 }
 
-export function getLeaveRequest(id: number) {
+export async function getLeaveRequest(id: number) {
   return get<LeaveRequest>(`${LEAVE_SELECT} WHERE r.id = ?`, id);
 }
 
-/** 휴가 유형별 잔여: 부여량 - (승인 + 승인대기) 사용량 */
-export function leaveBalances(userId: number, year: number) {
-  const types = listLeaveTypes();
-  const used = all<{ leave_type_id: number; minutes: number }>(
-    `SELECT leave_type_id, SUM(minutes) AS minutes FROM leave_requests
-     WHERE user_id = ? AND status IN ('approved','pending') AND substr(start_date,1,4) = ? GROUP BY leave_type_id`,
-    userId, String(year));
-  const grants = all<{ leave_type_id: number; minutes: number }>(
-    "SELECT leave_type_id, minutes FROM leave_grants WHERE user_id = ? AND year = ?", userId, year);
-  const usedBy = new Map(used.map((u) => [u.leave_type_id, u.minutes]));
-  const grantBy = new Map(grants.map((g) => [g.leave_type_id, g.minutes]));
-  return types.map((t) => {
-    const u = usedBy.get(t.id) ?? 0;
-    const granted = t.is_annual ? grantBy.get(t.id) ?? 0 : t.grant_minutes;
-    return { type: t, used: u, granted, remaining: granted == null ? null : granted - u };
-  });
+// ── 공휴일 ────────────────────────────────────────────
+
+export async function holidayMap(from: string, to: string) {
+  const rows = await all<{ date: string; name: string }>("SELECT date, name FROM holidays WHERE date BETWEEN ? AND ? ORDER BY date", from, to);
+  return new Map(rows.map((h) => [h.date, h.name]));
 }
 
-/** 신청 단위 → 사용 시간(분) */
-export function leaveMinutes(unit: string, start: string, end: string, startTime?: string | null, endTime?: string | null) {
+export async function listHolidays(year: number) {
+  return all<{ date: string; name: string }>("SELECT date, name FROM holidays WHERE substr(date, 1, 4) = ? ORDER BY date", String(year));
+}
+
+/** 소정근로일: 주말·공휴일이 아닌 날 */
+export async function workdays(from: string, to: string) {
+  const hol = await holidayMap(from, to);
+  return eachDay(from, to).filter((d) => !isWeekend(d) && !hol.has(d));
+}
+
+// ── 연차 ──────────────────────────────────────────────
+
+async function annualUsed(userId: number, from: string, to: string) {
+  return (await get<{ m: number }>(
+    `SELECT COALESCE(SUM(r.minutes), 0) AS m FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
+     WHERE r.user_id = ? AND t.is_annual = 1 AND r.status IN ('approved','pending') AND r.start_date >= ? AND r.start_date < ?`,
+    userId, from, to))!.m;
+}
+
+export type AnnualBalance = Entitlement & { adjustments: number; granted: number; used: number; remaining: number; basis: LeaveBasis };
+
+/** 오늘(asOf) 기준 연차 산정 기간의 부여·사용·잔여 */
+export async function annualBalance(user: Pick<User, "id" | "join_date">, asOf = today()): Promise<AnnualBalance> {
+  const basis = (await getSettings()).leave_basis as LeaveBasis;
+  // 회계연도 기준의 입사연도 월차 이월 계산에 필요한 전년도 사용량은 미리 조회한다
+  const year = Number(asOf.slice(0, 4));
+  const prevUsed = basis === "fiscal" ? await annualUsed(user.id, `${year - 1}-01-01`, `${year}-01-01`) : 0;
+  const ent = annualEntitlement(user.join_date, asOf, basis, () => prevUsed);
+  const [adj, used] = await Promise.all([
+    get<{ m: number }>("SELECT COALESCE(SUM(minutes), 0) AS m FROM leave_adjustments WHERE user_id = ? AND period_start = ?", user.id, ent.periodStart),
+    annualUsed(user.id, ent.periodStart, ent.periodEnd),
+  ]);
+  const adjustments = adj!.m;
+  const granted = ent.minutes + adjustments;
+  return { ...ent, adjustments, granted, used, remaining: granted - used, basis };
+}
+
+export async function listAdjustments(userId: number) {
+  return all<{ id: number; period_start: string; minutes: number; reason: string; created_at: string; by_name: string | null }>(
+    `SELECT a.*, u.name AS by_name FROM leave_adjustments a LEFT JOIN users u ON u.id = a.created_by WHERE a.user_id = ? ORDER BY a.id DESC`, userId);
+}
+
+/** 휴가 유형별 현황. 연차는 정책 산정 기간, 나머지는 올해 사용량 기준. */
+export async function leaveBalances(user: Pick<User, "id" | "join_date">, asOf = today()) {
+  const types = await listLeaveTypes();
+  const year = asOf.slice(0, 4);
+  const used = await all<{ leave_type_id: number; minutes: number }>(
+    `SELECT leave_type_id, SUM(minutes) AS minutes FROM leave_requests
+     WHERE user_id = ? AND status IN ('approved','pending') AND substr(start_date,1,4) = ? GROUP BY leave_type_id`,
+    user.id, year);
+  const usedBy = new Map(used.map((u) => [u.leave_type_id, u.minutes]));
+  const annual = await annualBalance(user, asOf);
+  return types.map((t) =>
+    t.is_annual
+      ? { type: t, used: annual.used, granted: annual.granted as number | null, remaining: annual.remaining as number | null, annual }
+      : {
+          type: t,
+          used: usedBy.get(t.id) ?? 0,
+          granted: t.grant_minutes,
+          remaining: t.grant_minutes == null ? null : t.grant_minutes - (usedBy.get(t.id) ?? 0),
+          annual: undefined,
+        },
+  );
+}
+
+/** 신청 단위 → 사용 시간(분). 종일 휴가는 주말·공휴일을 빼고 센다. */
+export async function leaveMinutes(unit: string, start: string, end: string, startTime?: string | null, endTime?: string | null) {
   if (unit === "am" || unit === "pm") return 4 * 60;
   if (unit === "hours" && startTime && endTime) return Math.max(0, workedMinutes(startTime, endTime));
-  return eachDay(start, end).filter((d) => !isWeekend(d)).length * DAY_MINUTES;
+  return (await workdays(start, end)).length * DAY_MINUTES;
 }
 
 // ── 근무 ──────────────────────────────────────────────
 
 export type DayCell = {
-  blocks: { kind: "work" | "leave"; label: string; start?: string; end?: string; pending?: boolean }[];
+  blocks: { kind: "work" | "leave" | "holiday"; label: string; start?: string; end?: string; pending?: boolean }[];
   minutes: number;
 };
 
-/** 구성원별 주간 근무표. 기본 근무(10–19시) 위에 근무 기록과 휴가를 겹쳐 계산한다. */
-export function weeklySchedule(users: User[], weekStart: string) {
-  const days = eachDay(weekStart, addDays(weekStart, 6));
-  const weekEnd = days[6];
-  const leaves = listLeaveRequests({ from: weekStart, to: weekEnd }).filter((l) => l.status === "approved" || l.status === "pending");
-  const records = all<{ user_id: number; date: string; start_time: string; end_time: string }>(
-    "SELECT * FROM work_records WHERE date BETWEEN ? AND ?", weekStart, weekEnd);
+/** 구성원별 근무표. 기본 근무시간(설정) 위에 근무 기록·휴가·공휴일을 겹쳐 계산한다. */
+export async function weeklySchedule(users: User[], weekStart: string, numDays = 7) {
+  const days = eachDay(weekStart, addDays(weekStart, numDays - 1));
+  const weekEnd = days[days.length - 1];
+  const [settings, holidays, allLeaves, records] = await Promise.all([
+    getSettings(),
+    holidayMap(weekStart, weekEnd),
+    listLeaveRequests({ from: weekStart, to: weekEnd }),
+    all<{ user_id: number; date: string; start_time: string; end_time: string }>(
+    "SELECT * FROM work_records WHERE date BETWEEN ? AND ?", weekStart, weekEnd),
+  ]);
+  const leaves = allLeaves.filter((l) => l.status === "approved" || l.status === "pending");
 
   return users.map((u) => {
     let total = 0;
@@ -221,10 +289,14 @@ export function weeklySchedule(users: User[], weekStart: string) {
       const cell: DayCell = { blocks: [], minutes: 0 };
       const inactive = u.join_date > d || (u.leave_date && u.leave_date < d) || u.status === "휴직" || u.status === "퇴사";
       if (isWeekend(d) || inactive) return cell;
+      if (holidays.has(d)) {
+        cell.blocks.push({ kind: "holiday", label: holidays.get(d)! });
+        return cell;
+      }
 
       const rec = records.find((r) => r.user_id === u.id && r.date === d);
-      const ws = rec?.start_time ?? WORK_START;
-      const we = rec?.end_time ?? WORK_END;
+      const ws = rec?.start_time ?? settings.work_start;
+      const we = rec?.end_time ?? settings.work_end;
       const dayLeaves = leaves.filter((l) => l.user_id === u.id && l.start_date <= d && l.end_date >= d);
 
       const full = dayLeaves.find((l) => l.unit === "day");
@@ -264,7 +336,7 @@ export function weeklySchedule(users: User[], weekStart: string) {
       total += cell.minutes;
       return cell;
     });
-    return { user: u, cells, total };
+    return { user: u, days, cells, total };
   });
 }
 
@@ -272,20 +344,20 @@ export function weeklySchedule(users: User[], weekStart: string) {
 
 const NOTICE_SELECT = `SELECT n.*, u.name AS author_name, u.color AS author_color FROM notices n JOIN users u ON u.id = n.author_id`;
 
-export function listNotices(includeHidden = false) {
+export async function listNotices(includeHidden = false) {
   return all<Notice>(`${NOTICE_SELECT} ${includeHidden ? "" : "WHERE n.hidden = 0"} ORDER BY n.published_at DESC`);
 }
 
-export function getNotice(id: number) {
+export async function getNotice(id: number) {
   return get<Notice>(`${NOTICE_SELECT} WHERE n.id = ?`, id);
 }
 
-export function noticeReactions(noticeId: number) {
+export async function noticeReactions(noticeId: number) {
   return all<{ emoji: string; count: number; user_ids: string }>(
-    "SELECT emoji, COUNT(*) AS count, GROUP_CONCAT(user_id) AS user_ids FROM notice_reactions WHERE notice_id = ? GROUP BY emoji", noticeId);
+    "SELECT emoji, COUNT(*)::int AS count, string_agg(user_id::text, ',') AS user_ids FROM notice_reactions WHERE notice_id = ? GROUP BY emoji", noticeId);
 }
 
-export function noticeComments(noticeId: number) {
+export async function noticeComments(noticeId: number) {
   return all<{ id: number; body: string; created_at: string; user_name: string; color: string }>(
     `SELECT c.id, c.body, c.created_at, u.name AS user_name, u.color FROM notice_comments c JOIN users u ON u.id = c.user_id
      WHERE c.notice_id = ? ORDER BY c.id`, noticeId);
@@ -295,7 +367,7 @@ export function noticeComments(noticeId: number) {
 
 const DOC_SELECT = `SELECT d.*, u.name AS author_name FROM documents d JOIN users u ON u.id = d.author_id`;
 
-export function listDocuments(opts: { authorId?: number; involving?: number } = {}) {
+export async function listDocuments(opts: { authorId?: number; involving?: number } = {}) {
   if (opts.authorId) return all<Document>(`${DOC_SELECT} WHERE d.author_id = ? ORDER BY d.id DESC`, opts.authorId);
   if (opts.involving)
     return all<Document>(
@@ -304,11 +376,11 @@ export function listDocuments(opts: { authorId?: number; involving?: number } = 
   return all<Document>(`${DOC_SELECT} ORDER BY d.id DESC`);
 }
 
-export function getDocument(id: number) {
+export async function getDocument(id: number) {
   return get<Document>(`${DOC_SELECT} WHERE d.id = ?`, id);
 }
 
-export function documentSteps(documentId: number) {
+export async function documentSteps(documentId: number) {
   return all<ApprovalStep>(
     `SELECT s.*, u.name AS approver_name FROM approval_steps s JOIN users u ON u.id = s.approver_id WHERE s.document_id = ? ORDER BY s.step`,
     documentId);
@@ -316,10 +388,10 @@ export function documentSteps(documentId: number) {
 
 // ── 할 일 (내가 결재할 항목) ────────────────────────────
 
-export type Todo = { kind: "leave" | "document"; id: number; from: string; title: string; tag: string; created_at: string; href: string };
+export type Todo = { kind: "leave" | "document" | "signup"; id: number; from: string; title: string; tag: string; created_at: string; href: string };
 
-export function todosFor(userId: number): Todo[] {
-  const leaves = listLeaveRequests({ approverId: userId, status: "pending" }).map<Todo>((l) => ({
+export async function todosFor(userId: number, isAdmin = false): Promise<Todo[]> {
+  const leaves = (await listLeaveRequests({ approverId: userId, status: "pending" })).map<Todo>((l) => ({
     kind: "leave",
     id: l.id,
     from: l.user_name,
@@ -328,9 +400,9 @@ export function todosFor(userId: number): Todo[] {
     created_at: l.created_at,
     href: "/time-off/manage",
   }));
-  const docs = all<Document & { step_id: number }>(
+  const docs = (await all<Document & { step_id: number }>(
     `${DOC_SELECT} JOIN approval_steps s ON s.document_id = d.id WHERE s.approver_id = ? AND s.status = 'pending' AND d.status = 'pending'`,
-    userId).map<Todo>((d) => ({
+    userId)).map<Todo>((d) => ({
     kind: "document",
     id: d.id,
     from: d.author_name,
@@ -339,10 +411,22 @@ export function todosFor(userId: number): Todo[] {
     created_at: d.created_at,
     href: `/workflow/${d.id}`,
   }));
-  return [...leaves, ...docs].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const signups = isAdmin
+    ? (await all<{ id: number; name: string; email: string; created_at: string }>(
+        "SELECT id, name, email, created_at FROM signup_requests WHERE status = 'pending'")).map<Todo>((r) => ({
+        kind: "signup",
+        id: r.id,
+        from: r.name,
+        title: `'${r.email}' 가입 승인 요청`,
+        tag: "가입 요청",
+        created_at: r.created_at,
+        href: "/people/manage?view=signups",
+      }))
+    : [];
+  return [...leaves, ...docs, ...signups].sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
-export function listKudos(limit = 5) {
+export async function listKudos(limit = 5) {
   return all<{ id: number; emoji: string; message: string; created_at: string; from_name: string; to_name: string }>(
     `SELECT k.*, f.name AS from_name, t.name AS to_name FROM kudos k JOIN users f ON f.id = k.from_id JOIN users t ON t.id = k.to_id
      ORDER BY k.id DESC LIMIT ?`, limit);
